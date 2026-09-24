@@ -1,6 +1,6 @@
 export const libraryRegionId = 'ctrlem-db-library';
 
-/** The first iteration intentionally leaves the editor content empty (feature 01). */
+/** Owns placement and the persistent content container; editors own their state. */
 export class LibraryShell {
   readonly element: HTMLElement;
   readonly content: HTMLDivElement;

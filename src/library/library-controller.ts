@@ -16,10 +16,13 @@ export class LibraryController {
   private hasMounted = false;
   private open = false;
 
-  constructor(private readonly page: CtrlEmPage) {
+  constructor(private readonly page: CtrlEmPage, private readonly onClose: () => void = () => {}) {
     this.shell = new LibraryShell(page.document);
     this.launcher = new LibraryLauncher(page.document, libraryRegionId, () => this.toggle());
   }
+
+  get content(): HTMLElement { return this.shell.content; }
+  setUnsaved(unsaved: boolean): void { this.launcher.setUnsaved(unsaved); }
 
   start(): void {
     this.stopObserving?.();
@@ -67,7 +70,7 @@ export class LibraryController {
     this.open = !this.open;
     this.reconcile();
     if (this.open) this.shell.focus();
-    else this.launcher.focus();
+    else { this.onClose(); this.launcher.focus(); }
   }
 
   dispose(): void {

@@ -1,5 +1,43 @@
-// Register background handlers synchronously so event-page/worker wakeups are safe.
-// Storage writers and task scheduling will be added with their owning features.
-chrome.runtime.onInstalled.addListener(() => {
-  console.info('[CtrlEm DB] Extension installed.', chrome.runtime.getManifest().version);
+import { authorizedTab, LibraryService } from './library-service';
+import { EditorSessionRepository, LibraryReadError, LibraryRepository } from '../storage/library-store';
+import type { ChangeResult } from '../model/library';
+
+const service = new LibraryService(
+  new LibraryRepository(chrome.storage.local), new EditorSessionRepository(chrome.storage.session),
+);
+
+// Register listeners synchronously for service-worker/event-page wakeups.
+chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
+  const tabId = authorizedTab(sender, chrome.runtime.id);
+  if (tabId === undefined) {
+    respond({ ok: false, error: 'Request not allowed.' });
+    return false;
+  }
+  void (async () => {
+    try {
+      const value = await service.handle(tabId, message);
+      respond({ ok: true, value });
+      if ((message as { type: string }).type === 'library:change') {
+        const result = value as ChangeResult;
+        if (result.status === 'saved') {
+          try {
+            const tabs = await chrome.tabs.query({ url: 'https://ctrlem.com/u/*' });
+            await Promise.all(tabs.map(async tab => {
+              if (tab.id === undefined) return;
+              // Tabs can close or have no receiver between query and delivery.
+              await chrome.tabs.sendMessage(tab.id, { type: 'library:changed', library: result.library }).catch(() => undefined);
+            }));
+          } catch { console.warn('[CtrlEm DB] Could not notify other tabs.'); }
+        }
+      }
+    } catch (error) {
+      // Never send arbitrary storage/validation exceptions or stored values to the page.
+      respond({ ok: false, error: error instanceof LibraryReadError ? error.message : 'Couldn’t complete the library operation. Retry without closing this tab.' });
+    }
+  })();
+  return true;
+});
+
+chrome.tabs.onRemoved.addListener(tabId => {
+  void service.removeTab(tabId).catch(() => console.warn('[CtrlEm DB] Could not remove closed-tab drafts.'));
 });
