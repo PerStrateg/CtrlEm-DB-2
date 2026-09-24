@@ -1,0 +1,16 @@
+.ctrlem-db-commands-header {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 12px;
+  align-items: start;
+}
+
+.ctrlem-db-commands-header > :not(.ctrlem-db-launcher) {
+  grid-column: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ctrlem-db-results-open > :not(.ctrlem-db-library) {
+  display: none !important;
+}

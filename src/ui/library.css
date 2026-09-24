@@ -1,0 +1,87 @@
+.ctrlem-db-launcher {
+  display: contents;
+}
+
+.ctrlem-db-button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: start;
+  box-sizing: border-box;
+  height: 32px;
+  min-width: 44px;
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ctrlem-db-button:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+}
+
+.ctrlem-db-button[aria-expanded='true'] {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary);
+  box-shadow: inset 0 -2px 0 currentColor;
+}
+
+.ctrlem-db-button:focus-visible,
+.ctrlem-db-library h2:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 3px;
+}
+
+.ctrlem-db-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ctrlem-db-availability {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  min-width: 0;
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.ctrlem-db-library[hidden],
+.ctrlem-db-availability[hidden] {
+  display: none !important;
+}
+
+.ctrlem-db-library {
+  min-width: 0;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.ctrlem-db-library-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.ctrlem-db-library-header h2 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.ctrlem-db-library-header p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.ctrlem-db-library-content {
+  min-height: 12rem;
+  padding: 1rem 1.25rem;
+}
