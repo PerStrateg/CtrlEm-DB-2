@@ -229,13 +229,13 @@ export class LibraryEditorView {
     }
     this.get('.ctrlem-db-previews').hidden = state.type !== 'image';
     this.get<HTMLInputElement>('.ctrlem-db-previews input').checked = state.draft.previewsEnabled;
-    const hint = state.type === 'text' ? 'One item per line.' : state.type === 'link' ? 'One item per line. HTTP(S) URL.' : 'One item per line. HTTP(S) URL + optional label.';
+    const hint = state.type === 'text' ? 'One item per line.' : state.type === 'link' ? 'One address per line. https:// is optional.' : 'One address + optional label per line. https:// is optional.';
     this.get('#ctrlem-db-format').textContent = hint;
-    this.text.placeholder = state.type === 'text' ? 'Enter one phrase per line' : state.type === 'link' ? 'https://example.com' : 'https://example.com/media Optional label';
+    this.text.placeholder = state.type === 'text' ? 'Enter one phrase per line' : state.type === 'link' ? 'example.com' : 'example.com/media Optional label';
     this.name.setAttribute('aria-invalid', String(Boolean(state.nameError)));
     this.get('#ctrlem-db-name-error').textContent = state.nameError ?? '';
     this.text.setAttribute('aria-invalid', String(state.invalidLines.length > 0));
-    this.get('#ctrlem-db-line-errors').textContent = state.invalidLines.length ? `Invalid lines: ${state.invalidLines.join(', ')}. Use a complete HTTP(S) URL.` : '';
+    this.get('#ctrlem-db-line-errors').textContent = state.invalidLines.length ? `Invalid lines: ${state.invalidLines.join(', ')}. Enter a web address, such as example.com.` : '';
     const lineActions = this.get('.ctrlem-db-line-actions');
     lineActions.hidden = !state.invalidLines.length;
     if (previousLines !== state.invalidLines.join(',')) {

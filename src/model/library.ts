@@ -1,3 +1,5 @@
+import { normalizeWebAddress } from './web-address';
+
 export const contentTypes = ['link', 'text', 'image', 'sound', 'video'] as const;
 export type ContentType = typeof contentTypes[number];
 export const typeLabels: Record<ContentType, string> = {
@@ -30,14 +32,12 @@ export function parseItems(type: ContentType, text: string, previous: Item[] = [
     const line = source.trim();
     if (!line) continue;
     const separator = type === 'text' || type === 'link' ? -1 : line.search(/\s/);
-    const value = separator < 0 ? line : line.slice(0, separator);
+    const sourceValue = separator < 0 ? line : line.slice(0, separator);
+    const value = type === 'text' ? sourceValue : normalizeWebAddress(sourceValue);
     const label = separator < 0 ? undefined : line.slice(separator).trim() || undefined;
-    if (type !== 'text') {
-      // URL() accepts embedded whitespace, which is not a valid editor URL token.
-      if (/\s/.test(value) || !/^https?:\/\//i.test(value) || !URL.canParse(value)) {
-        invalidLines.push(index + 1);
-        continue;
-      }
+    if (value === undefined) {
+      invalidLines.push(index + 1);
+      continue;
     }
     if (seen.has(value)) continue;
     seen.add(value);
