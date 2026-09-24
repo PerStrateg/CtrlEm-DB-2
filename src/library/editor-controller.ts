@@ -6,7 +6,7 @@ import { LibraryEditorView } from '../ui/library-editor';
 export const autosaveDelay = 500;
 interface DraftState {
   data: EditorDraft; status: string; invalidLines: number[]; nameError?: string;
-  conflict: boolean; busy: number; textVersion: number; nameVersion: number;
+  conflict: boolean; saveFailed: boolean; busy: number; textVersion: number; nameVersion: number;
   timer?: ReturnType<typeof setTimeout>; work: Promise<void>;
   retry?: () => void;
 }
@@ -86,7 +86,7 @@ export class EditorController {
     const category = this.library.categories.find(item => item.id === data.id);
     const conflict = !category || category.revision !== data.baseRevision;
     return { data, status: conflict ? 'Changed in another tab' : data.dirtyName || data.dirtyText ? 'Unsaved changes' : 'Saved',
-      invalidLines: [], conflict, busy: 0, textVersion: 0, nameVersion: 0, work: Promise.resolve() };
+      invalidLines: [], conflict, saveFailed: false, busy: 0, textVersion: 0, nameVersion: 0, work: Promise.resolve() };
   }
   private active(): DraftState | undefined { return this.drafts.get(this.session.selected[this.session.activeType] ?? ''); }
   private ensureSelected(): void {
@@ -217,7 +217,7 @@ export class EditorController {
     const version = state.nameVersion;
     this.change(state, { kind: 'update', name }, () => {
       if (state.nameVersion === version) { state.data.name = name.trim(); state.data.dirtyName = false; }
-    });
+    }, () => state.data.dirtyName && state.nameVersion === version);
   }
   private saveText(state: DraftState): void {
     if (!state.data.dirtyText) return;
@@ -228,12 +228,12 @@ export class EditorController {
     const version = state.textVersion;
     this.change(state, { kind: 'update', text, previewsEnabled }, () => {
       if (state.textVersion === version) state.data.dirtyText = false;
-    });
+    }, () => state.data.dirtyText && state.textVersion === version);
   }
 
-  private change(state: DraftState, fields: ChangeFields, saved: () => void): void {
+  private change(state: DraftState, fields: ChangeFields, saved: () => void, isCurrent: () => boolean = () => true): void {
     state.work = state.work.then(async () => {
-      if (this.disposed || state.conflict || !this.drafts.has(state.data.id)) return;
+      if (this.disposed || state.conflict || this.drafts.get(state.data.id) !== state || !isCurrent()) return;
       state.retry = undefined;
       state.busy++; state.status = 'Saving…'; this.render();
       try {
@@ -247,10 +247,13 @@ export class EditorController {
           const category = result.library.categories.find(item => item.id === state.data.id);
           if (category) state.data.baseRevision = category.revision;
           saved();
-          state.status = state.data.dirtyName || state.data.dirtyText ? 'Unsaved changes' : 'Saved';
+          const dirty = state.data.dirtyName || state.data.dirtyText;
+          if (!dirty) state.saveFailed = false;
+          state.status = state.saveFailed ? 'Couldn’t save' : dirty ? 'Unsaved changes' : 'Saved';
           if (state.invalidLines.length) state.status = 'Fix highlighted lines to save';
         }
       } catch {
+        state.saveFailed = true;
         state.status = 'Couldn’t save';
         if (fields.kind !== 'update') state.retry = () => this.change(state, fields, saved);
       }

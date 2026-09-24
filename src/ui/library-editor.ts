@@ -165,6 +165,9 @@ export class LibraryEditorView {
 
   render(state: EditorViewState): void {
     const switched = this.selectedId !== state.draft?.id || this.state?.type !== state.type;
+    const creating = this.get('.ctrlem-db-create-form').contains(this.element.ownerDocument.activeElement);
+    const deleting = !this.get('.ctrlem-db-delete-confirm').hidden &&
+      this.get('.ctrlem-db-delete-confirm').contains(this.element.ownerDocument.activeElement);
     const previousLines = this.state?.invalidLines.join(',');
     this.state = state;
     this.get('.ctrlem-db-load-status').textContent = state.loading ? 'Loading library…' : state.error ?? '';
@@ -220,6 +223,10 @@ export class LibraryEditorView {
     }
     this.selectedId = state.draft?.id;
     this.get('.ctrlem-db-category-editor').hidden = !state.draft;
+    if (switched && deleting) {
+      if (state.draft) this.name.focus();
+      else this.get<HTMLButtonElement>('.ctrlem-db-create').focus();
+    }
     if (!state.draft) return;
     if (this.name.value !== state.draft.name) this.name.value = state.draft.name;
     if (switched || this.text.value !== state.draft.text) {
@@ -227,6 +234,7 @@ export class LibraryEditorView {
       this.text.setSelectionRange(state.draft.selectionStart, state.draft.selectionEnd);
       this.text.scrollTop = state.draft.scrollTop;
     }
+    if (switched && creating) this.text.focus();
     this.get('.ctrlem-db-previews').hidden = state.type !== 'image';
     this.get<HTMLInputElement>('.ctrlem-db-previews input').checked = state.draft.previewsEnabled;
     const hint = state.type === 'text' ? 'One item per line.' : state.type === 'link' ? 'One address per line. https:// is optional.' : 'One address + optional label per line. https:// is optional.';

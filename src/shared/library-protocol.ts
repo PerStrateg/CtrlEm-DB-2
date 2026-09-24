@@ -1,7 +1,9 @@
-// v3 schemas are interpreter-only and work with extension CSP (no code generation).
-import { z } from 'zod/v3';
+import { z } from 'zod';
 import { contentTypes } from '../model/library';
 import type { Library, LibraryChange, ChangeResult } from '../model/library';
+
+// Extension CSP forbids dynamic code generation, including capability probes.
+z.config({ jitless: true });
 
 const id = z.string().uuid();
 const revision = z.number().int().nonnegative();
@@ -22,7 +24,7 @@ const draftSchema = z.object({
 }).strict();
 export type EditorDraft = z.infer<typeof draftSchema>;
 export const sessionSchema = z.object({
-  activeType: type, selected: z.record(type, id.optional()), drafts: z.array(draftSchema),
+  activeType: type, selected: z.partialRecord(type, id), drafts: z.array(draftSchema),
 }).strict();
 export type EditorSession = z.infer<typeof sessionSchema>;
 export const emptySession = (): EditorSession => ({ activeType: 'link', selected: {}, drafts: [] });
