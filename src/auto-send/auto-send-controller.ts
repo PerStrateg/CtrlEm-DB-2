@@ -46,7 +46,7 @@ export class AutoSendController {
     const detached = () => { void this.client.request({ type: 'auto:detach' }).catch(() => undefined); this.page.dispose(); };
     const restored = (event: PageTransitionEvent) => { if (event.persisted) void this.act({ type: 'auto:snapshot' }); };
     window.addEventListener('pagehide', detached); window.addEventListener('pageshow', restored);
-    const timer = window.setInterval(() => { this.reconcile(); this.render(); }, 1000);
+    const timer = window.setInterval(() => this.reconcile(), 1000);
     this.cleanups.push(() => { window.removeEventListener('pagehide', detached); window.removeEventListener('pageshow', restored); window.clearInterval(timer); });
     this.reconcile(); void this.act({ type: 'auto:snapshot' }, 'connection', 'Connecting…');
   }

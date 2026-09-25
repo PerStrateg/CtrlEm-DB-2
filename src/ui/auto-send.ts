@@ -3,6 +3,12 @@ import type { AutoCommandKey, AutoTask } from '../model/auto-send';
 import type { AutoSnapshot } from '../shared/auto-send-protocol';
 
 function text(element: HTMLElement, value: string): void { if (element.textContent !== value) element.textContent = value; }
+function attribute(element: HTMLElement, name: string, value: string): void {
+  if (element.getAttribute(name) !== value) element.setAttribute(name, value);
+}
+function flag(element: HTMLElement, name: 'hidden' | 'disabled', value: boolean): void {
+  if (element.hasAttribute(name) !== value) element.toggleAttribute(name, value);
+}
 function button(document: Document, label: string, action: () => void): HTMLButtonElement {
   const element = document.createElement('button'); element.type = 'button';
   element.textContent = label; element.addEventListener('click', action); return element;
@@ -31,12 +37,12 @@ export class AutoSendControl {
   }
   render(task: AutoTask | undefined, pending: string | undefined, connected: boolean): void {
     const action = pending ?? (task?.status === 'paused' ? 'Resume auto-send' : task ? 'Stop auto-send' : 'Start auto-send');
-    this.toggle.title = action; this.toggle.setAttribute('aria-label', action);
-    this.toggle.setAttribute('aria-pressed', String(Boolean(task && task.status !== 'paused')));
-    this.toggle.setAttribute('aria-busy', String(Boolean(pending || task?.status === 'stopping')));
-    this.toggle.disabled = Boolean(pending) || task?.status === 'stopping' || !connected;
-    this.interval.disabled = Boolean(task || pending);
-    if (task) this.interval.value = String(task.intervalSeconds);
+    attribute(this.toggle, 'title', action); attribute(this.toggle, 'aria-label', action);
+    attribute(this.toggle, 'aria-pressed', String(Boolean(task && task.status !== 'paused')));
+    attribute(this.toggle, 'aria-busy', String(Boolean(pending || task?.status === 'stopping')));
+    flag(this.toggle, 'disabled', Boolean(pending) || task?.status === 'stopping' || !connected);
+    flag(this.interval, 'disabled', Boolean(task || pending));
+    if (task && this.interval.value !== String(task.intervalSeconds)) this.interval.value = String(task.intervalSeconds);
   }
 }
 interface TaskRow { element: HTMLElement; title: HTMLElement; source: HTMLElement; status: HTMLElement; stop: HTMLButtonElement; resume: HTMLButtonElement; open: HTMLButtonElement }
@@ -75,7 +81,7 @@ export class AutoTaskPanel {
   }
   render(snapshot: AutoSnapshot, connected: boolean, pending: ReadonlyMap<string, string>, error?: string): void {
     const panelHadFocus = this.element.contains(this.document.activeElement);
-    this.element.hidden = !snapshot.tasks.length && connected && !error;
+    flag(this.element, 'hidden', !snapshot.tasks.length && connected && !error);
     if (this.element.hidden && panelHadFocus) {
       const visibleControl = Array.from(this.document.querySelectorAll<HTMLButtonElement>('.ctrlem-db-auto-control button'))
         .find(button => !button.disabled && button.getClientRects().length > 0);
@@ -83,11 +89,11 @@ export class AutoTaskPanel {
     }
     text(this.heading, `Auto-send (${snapshot.tasks.length})`);
     text(this.status, !connected ? 'Connection lost. Last known task state; sending is not confirmed.' : error ?? '');
-    this.retry.hidden = connected && !error;
-    this.status.parentElement!.hidden = connected && !error;
-    this.stopAll.disabled = !connected || pending.has('all'); text(this.stopAll, pending.get('all') ?? 'Stop all');
-    this.stopAll.hidden = !snapshot.tasks.length;
-    this.collapse.hidden = !snapshot.tasks.length;
+    flag(this.retry, 'hidden', connected && !error);
+    flag(this.status.parentElement!, 'hidden', connected && !error);
+    flag(this.stopAll, 'disabled', !connected || pending.has('all')); text(this.stopAll, pending.get('all') ?? 'Stop all');
+    flag(this.stopAll, 'hidden', !snapshot.tasks.length);
+    flag(this.collapse, 'hidden', !snapshot.tasks.length);
     for (const [id, row] of this.rows) if (!snapshot.tasks.some(task => task.id === id)) {
       const focused = row.element.contains(this.document.activeElement);
       row.element.remove(); this.rows.delete(id);
@@ -108,15 +114,16 @@ export class AutoTaskPanel {
         row = { element, title, source, status, stop, resume, open }; this.rows.set(task.id, row);
       }
       text(row.title, `${task.receiver.toUpperCase()} · ${autoCommandLabel(task.command)}`);
-      row.title.title = row.title.textContent!;
+      attribute(row.title, 'title', row.title.textContent!);
       text(row.source, task.categoryName ? `${task.categoryName} · ${task.intervalSeconds} sec` : `${task.intervalSeconds} sec`);
-      row.source.title = row.source.textContent!;
-      row.element.dataset.status = task.status;
+      attribute(row.source, 'title', row.source.textContent!);
+      attribute(row.element, 'data-status', task.status);
       text(row.status, pending.get(task.id) ?? (connected ? taskStatus(task, snapshot.nextAllowedAt, Date.now()) : 'Last known: ' + task.status));
-      row.stop.disabled = !connected || pending.has(task.id) || pending.has('all') || task.status === 'stopping';
-      row.resume.hidden = task.status !== 'paused' || !snapshot.readyReceivers.includes(task.receiver);
-      row.open.hidden = task.status !== 'paused';
-      row.resume.disabled = row.open.disabled = !connected || pending.has(task.id);
+      flag(row.stop, 'disabled', !connected || pending.has(task.id) || pending.has('all') || task.status === 'stopping');
+      flag(row.resume, 'hidden', task.status !== 'paused' || !snapshot.readyReceivers.includes(task.receiver));
+      flag(row.open, 'hidden', task.status !== 'paused');
+      flag(row.resume, 'disabled', !connected || pending.has(task.id));
+      flag(row.open, 'disabled', !connected || pending.has(task.id));
     }
   }
 }
