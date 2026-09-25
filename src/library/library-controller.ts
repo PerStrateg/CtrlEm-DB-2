@@ -26,6 +26,7 @@ export class LibraryController {
   setUnsaved(unsaved: boolean): void { this.launcher.setUnsaved(unsaved); }
 
   openFrom(initiator: HTMLElement): void {
+    this.shell.showCategories();
     this.returnFocus = initiator;
     this.open = true;
     this.reconcile();

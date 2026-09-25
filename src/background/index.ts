@@ -2,6 +2,12 @@ import { authorizedTab, LibraryService } from './library-service';
 import { EditorSessionRepository, LibraryReadError, LibraryRepository } from '../storage/library-store';
 import type { ChangeResult } from '../model/library';
 import { SelectionRepository } from '../storage/selection-store';
+import { CredentialsRepository, openCredentialKey } from '../storage/credentials-store';
+import { authorizedSettings, credentialsRequest } from '../shared/credentials-protocol';
+import { WriteQueue } from '../storage/library-store';
+
+const credentials = new CredentialsRepository(chrome.storage.local, openCredentialKey);
+const credentialsQueue = new WriteQueue();
 
 const service = new LibraryService(
   new LibraryRepository(chrome.storage.local), new EditorSessionRepository(chrome.storage.session),
@@ -10,6 +16,13 @@ const service = new LibraryService(
 
 // Register listeners synchronously for service-worker/event-page wakeups.
 chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
+  if (authorizedSettings(sender, chrome.runtime.id, chrome.runtime.getURL('settings.html'))) {
+    void credentialsQueue.run(async () => {
+      const request = credentialsRequest.parse(message);
+      return request.type === 'credentials:load' ? credentials.read() : credentials.save(request.field, request.value);
+    }).then(value => respond({ ok: true, value }), () => respond({ ok: false, error: 'Couldn’t complete settings operation. Retry.' }));
+    return true;
+  }
   const tabId = authorizedTab(sender, chrome.runtime.id);
   if (tabId === undefined) {
     respond({ ok: false, error: 'Request not allowed.' });
