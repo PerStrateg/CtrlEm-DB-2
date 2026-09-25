@@ -1,0 +1,97 @@
+import { typeLabels } from '../model/library';
+import type { ImportPlan } from '../model/library-file';
+
+interface TransferActions {
+  export(category: boolean): void;
+  file(file: File, replace: boolean): void;
+  confirm(): void;
+  cancel(): void;
+  retrySave(): void;
+  exportSaved(): void;
+}
+export class LibraryTransferView {
+  readonly element: HTMLElement;
+  private readonly controls: HTMLFieldSetElement;
+  private readonly panel: HTMLElement;
+  private readonly status: HTMLElement;
+  private initiator?: HTMLElement;
+  private busyFocus?: HTMLElement;
+  constructor(private readonly document: Document, actions: TransferActions) {
+    this.element = document.createElement('section'); this.element.className = 'ctrlem-db-transfer';
+    this.element.setAttribute('aria-label', 'Import and export');
+    this.element.innerHTML = `<fieldset disabled>
+      <div class="ctrlem-db-actions">
+        <button type="button" data-transfer="category">Export category</button>
+        <button type="button" data-transfer="library">Export library</button>
+        <button type="button" data-transfer="import">Import categories</button>
+        <button type="button" data-transfer="replace">Replace library</button>
+      </div>
+      <input type="file" accept=".json,application/json" hidden>
+      <div class="ctrlem-db-transfer-panel" hidden></div>
+      </fieldset><p role="status"></p>`;
+    this.controls = this.element.querySelector('fieldset')!;
+    this.panel = this.element.querySelector('.ctrlem-db-transfer-panel')!;
+    this.status = this.element.querySelector('[role=status]')!;
+    const file = this.element.querySelector('input')!;
+    let replace = false;
+    for (const action of ['category', 'library', 'import', 'replace']) {
+      const button = this.element.querySelector<HTMLButtonElement>(`[data-transfer=${action}]`)!;
+      button.addEventListener('click', () => {
+        this.initiator = button;
+        if (action === 'category' || action === 'library') actions.export(action === 'category');
+        else { replace = action === 'replace'; file.value = ''; file.click(); }
+      });
+    }
+    file.addEventListener('change', () => { if (file.files?.[0]) actions.file(file.files[0], replace); });
+    this.panel.addEventListener('click', event => {
+      const action = (event.target as Element).closest<HTMLButtonElement>('button')?.dataset.transfer;
+      if (action === 'confirm') actions.confirm();
+      if (action === 'cancel') actions.cancel();
+      if (action === 'retry') actions.retrySave();
+      if (action === 'saved') actions.exportSaved();
+    });
+  }
+  available(enabled: boolean, category: boolean): void {
+    this.element.hidden = !enabled;
+    this.element.querySelector<HTMLButtonElement>('[data-transfer=category]')!.disabled = !category;
+  }
+  busy(busy: boolean): void {
+    if (this.controls.disabled === busy) return;
+    if (busy && this.controls.contains(this.document.activeElement)) this.busyFocus = this.document.activeElement as HTMLElement;
+    this.controls.disabled = busy;
+    if (!busy) {
+      if (this.busyFocus?.isConnected && this.document.activeElement === this.document.body) this.busyFocus.focus({ preventScroll: true });
+      this.busyFocus = undefined;
+    }
+  }
+  message(message: string): void { this.status.textContent = message; }
+  private button(action: string, label: string): HTMLButtonElement {
+    const button = this.document.createElement('button'); button.type = 'button';
+    button.dataset.transfer = action; button.textContent = label; return button;
+  }
+  private paragraph(text: string): HTMLParagraphElement {
+    const p = this.document.createElement('p'); p.textContent = text; return p;
+  }
+  preview(plan: ImportPlan, replace: boolean, drafts: boolean): void {
+    this.panel.replaceChildren(this.paragraph(`${plan.categories.length} categories, ${plan.categories.reduce((count, category) => count + category.items.length, 0)} items`));
+    const list = this.document.createElement('ul');
+    for (const category of plan.categories) {
+      const li = this.document.createElement('li'); li.textContent = `${typeLabels[category.type]}: ${category.name} (${category.items.length})`; list.append(li);
+    }
+    this.panel.append(list);
+    for (const warning of plan.warnings) this.panel.append(this.paragraph(warning));
+    if (replace) this.panel.append(this.paragraph('This replaces all saved categories. Other extension settings are kept.'));
+    if (replace && drafts) this.panel.append(this.paragraph('Unsaved drafts in this tab will be discarded. Drafts in other tabs will remain as conflicts.'));
+    this.panel.append(this.button('confirm', replace ? drafts ? 'Discard drafts and replace' : 'Replace' : 'Import'), this.button('cancel', 'Cancel'));
+    this.panel.hidden = false;
+  }
+  unsaved(): void {
+    this.panel.replaceChildren(this.paragraph('Some drafts are not saved. Fix invalid lines or resolve conflicts before retrying, or export only saved entries.'),
+      this.button('retry', 'Retry save'), this.button('saved', 'Export saved version'), this.button('cancel', 'Cancel'));
+    this.panel.hidden = false;
+  }
+  close(restoreFocus = true): void {
+    this.panel.hidden = true; this.panel.replaceChildren();
+    if (restoreFocus) this.initiator?.focus({ preventScroll: true });
+  }
+}

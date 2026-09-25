@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from './validation';
 import { commandKeys } from '../model/commands';
 import type { CommandKey } from '../model/commands';
 import type { Library } from '../model/library';

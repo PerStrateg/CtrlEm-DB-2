@@ -7,11 +7,13 @@ import type { PickerClient, PickerSelection, PickerSelections } from '../shared/
 import { CommandFields } from '../site/command-fields';
 import type { CommandField, SiteGallery } from '../site/command-fields';
 import { ContentPickerView } from '../ui/content-picker';
+import { MediaPreview } from '../ui/media-preview';
 
 interface PickerState {
   field: CommandField; view: ContentPickerView; gallery: SiteGallery; gallerySignature: string;
   selection: PickerSelection; sequence: number; selectionError: boolean; previewBusy: boolean;
   previewError?: { id: string; enabled: boolean; message: string };
+  defaultValue?: string;
 }
 const emptyGallery = (): SiteGallery => ({ available: false, pending: false, failed: false, items: [] });
 type OpenEditor = (type: ContentType, id: string | undefined, create: boolean, initiator: HTMLElement) => void;
@@ -25,9 +27,10 @@ export class PickerController {
   private disposed = false;
   private stopObserving?: () => void;
   private unsubscribe?: () => void;
+  private readonly preview: MediaPreview;
 
   constructor(private readonly page: CommandFields, private readonly client: LibraryClient & PickerClient,
-    private readonly openEditor: OpenEditor) {}
+    private readonly openEditor: OpenEditor) { this.preview = new MediaPreview(page.document); }
 
   start(): void {
     this.unsubscribe = this.client.subscribe(library => { this.accept(library); this.renderAll(); });
@@ -62,6 +65,12 @@ export class PickerController {
         const view = new ContentPickerView(this.page.document, commands[field.key].label, {
           category: id => this.selectCategory(field.key, id),
           select: id => this.selectItem(field.key, id),
+          preview: (id, initiator) => {
+            const current = this.states.get(field.key)!;
+            const item = this.items(current).find(item => item.id === id);
+            const type = commands[field.key].type;
+            if (item && (type === 'sound' || type === 'video')) this.preview.open(type, item, current.view.element, initiator);
+          },
           deleteDefault: id => {
             const current = this.states.get(field.key)!;
             if (current.selection.categoryId === 'default') this.page.deleteDefault(field.key, id);
@@ -93,6 +102,7 @@ export class PickerController {
     }
     // Keep the view and scroll when a native panel temporarily disappears.
     for (const [key, state] of this.states) if (!fields.some(field => field.key === key)) state.view.element.remove();
+    this.preview.reconcile();
   }
 
   private category(state: PickerState) {
@@ -124,6 +134,7 @@ export class PickerController {
       loading: this.loading, loadError: this.loadError,
       error: [state.selectionError ? 'Couldn’t save selection. Retry.' : '', state.previewError?.message].filter(Boolean).join(' ') || undefined,
       image: type === 'image', previews: this.category(state)?.previewsEnabled ?? true, previewBusy: state.previewBusy,
+      mediaType: type === 'sound' || type === 'video' ? type : undefined,
       emptyMessage: state.selection.categoryId === 'default'
         ? state.gallery.failed ? 'Couldn’t load site images. Reopen the command to retry.'
           : state.gallery.pending ? 'Open the command to load site images.' : 'No items yet. Create category to add images.'
@@ -136,10 +147,15 @@ export class PickerController {
     state.selection = { categoryId: id };
     this.render(state); this.persistSelection(state);
   }
+  isDefaultValue(key: CommandKey, value: string): boolean {
+    const state = this.states.get(key);
+    return state?.defaultValue === value;
+  }
   private selectItem(key: CommandKey, id: string): void {
     const state = this.states.get(key)!;
     const item = this.items(state).find(item => item.id === id); if (!item) return;
     this.page.fill(state.field, item, state.selection.categoryId === 'default');
+    state.defaultValue = state.selection.categoryId === 'default' ? item.value : undefined;
     state.selection = { ...state.selection, itemId: id };
     this.render(state); this.persistSelection(state);
   }
@@ -175,6 +191,7 @@ export class PickerController {
   }
 
   dispose(): void {
+    this.preview.close(false);
     this.disposed = true; this.stopObserving?.(); this.unsubscribe?.();
     for (const state of this.states.values()) state.view.element.remove();
     this.page.restoreGalleries();

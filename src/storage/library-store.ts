@@ -2,6 +2,11 @@ import { applyChange, emptyLibrary } from '../model/library';
 import type { ChangeResult, Library, LibraryChange } from '../model/library';
 import { emptySession, librarySchema, sessionSchema } from '../shared/library-protocol';
 import type { EditorSession } from '../shared/library-protocol';
+import { captureInput } from '../model/input-capture';
+import type { CaptureResult } from '../model/input-capture';
+import { planImport } from '../model/library-file';
+import type { ImportMode, ImportResult, LibraryFile } from '../model/library-file';
+import type { ContentType } from '../model/library';
 
 export interface StorageArea {
   get(key: string): Promise<Record<string, unknown>>;
@@ -25,6 +30,20 @@ export class LibraryRepository {
     const result = applyChange(await this.read(), change);
     if (result.status === 'saved') await this.storage.set({ [libraryKey]: result.library });
     return result;
+  }
+  async capture(type: ContentType, value: string): Promise<CaptureResult> {
+    const result = captureInput(await this.read(), type, value);
+    if (result.status === 'saved') await this.storage.set({ [libraryKey]: result.library });
+    return result;
+  }
+  async import(file: LibraryFile, mode: ImportMode, baseRevision: number): Promise<ImportResult> {
+    const current = await this.read();
+    if (current.revision !== baseRevision) return { status: 'conflict', library: current, categoryIds: [] };
+    const plan = planImport(current, file, mode);
+    const library: Library = { ...current, revision: current.revision + 1,
+      categories: mode === 'replace' ? plan.categories : [...current.categories, ...plan.categories] };
+    await this.storage.set({ [libraryKey]: library });
+    return { status: 'saved', library, categoryIds: plan.categories.map(category => category.id) };
   }
 }
 

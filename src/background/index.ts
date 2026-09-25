@@ -20,8 +20,8 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
       const receiver = new URL(sender.url!).pathname.split('/')[2]!;
       const value = await service.handle(tabId, message, receiver);
       respond({ ok: true, value });
-      if ((message as { type: string }).type === 'library:change') {
-        const result = value as ChangeResult;
+      if (['library:change', 'library:capture', 'library:import'].includes((message as { type: string }).type)) {
+        const result = value as Pick<ChangeResult, 'library'> & { status: string };
         if (result.status === 'saved') {
           try {
             const tabs = await chrome.tabs.query({ url: 'https://ctrlem.com/u/*' });

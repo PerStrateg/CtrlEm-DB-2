@@ -1,5 +1,6 @@
 import type { Item } from '../model/library';
 import type { PickerSelection } from '../shared/picker-protocol';
+import type { MediaType } from './media-preview';
 
 export interface PickerCategory { id: string; name: string; count: number }
 export interface PickerViewState {
@@ -7,6 +8,7 @@ export interface PickerViewState {
   loading: boolean; loadError: boolean; error?: string;
   image: boolean; previews: boolean; previewBusy: boolean;
   emptyMessage?: string;
+  mediaType?: MediaType;
 }
 interface PickerActions {
   category(id: string): void;
@@ -15,6 +17,7 @@ interface PickerActions {
   edit(create: boolean, initiator: HTMLElement): void;
   previews(enabled: boolean): void;
   retry(): void;
+  preview(id: string, initiator: HTMLElement): void;
 }
 
 /** Keyed controls preserve row focus and list scroll on library updates. */
@@ -36,10 +39,10 @@ export class ContentPickerView {
     this.element.setAttribute('aria-label', `${label} library`);
     this.element.innerHTML = `
       <div class="ctrlem-db-picker-tools">
-        <label>Category <select></select></label>
-        <button type="button" data-action="create">Create category</button>
-        <button type="button" data-action="edit">Edit category</button>
-        <label class="ctrlem-db-picker-previews"><input type="checkbox"> Show previews</label>
+        <select title="Category"></select>
+        <button type="button" class="ctrlem-db-picker-tool" data-action="create" title="Create category" aria-label="Create category">+</button>
+        <button type="button" class="ctrlem-db-picker-tool" data-action="edit" title="Edit category" aria-label="Edit category">✎</button>
+        <label class="ctrlem-db-picker-previews" title="Show previews"><input type="checkbox" aria-label="Show previews"></label>
       </div>
       <p class="ctrlem-db-picker-status" role="status"></p>
       <button type="button" data-action="retry" hidden>Retry</button>
@@ -58,6 +61,8 @@ export class ContentPickerView {
     this.retry.addEventListener('click', actions.retry);
     this.previews.addEventListener('change', () => actions.previews(this.previews.checked));
     this.items.addEventListener('click', event => {
+      const preview = (event.target as Element).closest<HTMLButtonElement>('button[data-preview-id]');
+      if (preview) { actions.preview(preview.dataset.previewId!, preview); return; }
       const remove = (event.target as Element).closest<HTMLButtonElement>('button[data-delete-id]');
       if (remove) { actions.deleteDefault(remove.dataset.deleteId!); return; }
       const row = (event.target as Element).closest<HTMLButtonElement>('button[data-item-id]');
@@ -87,7 +92,8 @@ export class ContentPickerView {
       : state.error ?? (!state.categories.length ? 'No categories yet.' : !state.items.length ? state.emptyMessage ?? 'No items yet.' : '');
     if (this.status.textContent !== status) this.status.textContent = status;
     this.retry.hidden = !(state.loadError || state.error);
-    this.items.classList.toggle('ctrlem-db-picker-grid', state.image && state.previews);
+    this.items.classList.toggle('ctrlem-db-picker-grid', state.image);
+    this.items.classList.toggle('ctrlem-db-picker-no-previews', state.image && !state.previews);
     const ids = new Set(state.items.map(item => item.id));
     for (const [id, row] of this.rows) if (!ids.has(id)) { row.parentElement!.remove(); this.rows.delete(id); }
     state.items.forEach((item, index) => {
@@ -119,6 +125,15 @@ export class ContentPickerView {
         }
       } else { img?.remove(); row.querySelector('small')?.remove(); }
       const card = row.parentElement!;
+      let preview = card.querySelector<HTMLButtonElement>('[data-preview-id]');
+      if (state.mediaType) {
+        if (!preview) {
+          preview = this.document.createElement('button'); preview.type = 'button';
+          preview.className = 'ctrlem-db-picker-preview'; preview.dataset.previewId = item.id;
+          preview.textContent = 'Preview'; card.append(preview);
+        }
+        preview.setAttribute('aria-label', `Preview ${label}`);
+      } else preview?.remove();
       let remove = card.querySelector<HTMLButtonElement>('[data-delete-id]');
       if (state.image && state.selection.categoryId === 'default') {
         if (!remove) {

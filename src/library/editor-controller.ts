@@ -27,6 +27,7 @@ export class EditorController {
   private sessionSequence = 0;
   private unsubscribe?: () => void;
   private disposed = false;
+  private transferLocked = false;
   private pendingOpen?: { type: ContentType; id?: string; create: boolean };
 
   constructor(container: HTMLElement, private readonly client: LibraryClient, private readonly onDirty: (dirty: boolean) => void) {
@@ -223,8 +224,8 @@ export class EditorController {
     if (retry) retry();
     else this.flushActive();
   }
-  private rename(): void {
-    const state = this.active(); if (!state || !state.data.dirtyName || state.conflict) return;
+  private rename(state = this.active()): void {
+    if (!state || !state.data.dirtyName || state.conflict) return;
     const name = state.data.name;
     state.nameError = categoryNameError(this.library, state.data.type, name, state.data.id);
     if (state.nameError) { this.render(); return; }
@@ -247,7 +248,7 @@ export class EditorController {
 
   private change(state: DraftState, fields: ChangeFields, saved: () => void, isCurrent: () => boolean = () => true): void {
     state.work = state.work.then(async () => {
-      if (this.disposed || state.conflict || this.drafts.get(state.data.id) !== state || !isCurrent()) return;
+      if (this.disposed || this.transferLocked || state.conflict || this.drafts.get(state.data.id) !== state || !isCurrent()) return;
       state.retry = undefined;
       state.busy++; state.status = 'Saving…'; this.render();
       try {
@@ -322,6 +323,40 @@ export class EditorController {
     if (this.active()?.data.id !== id) this.selectCategory(id);
     if (!this.drafts.has(id)) this.drafts.set(id, this.restore(this.fromCategory(category)));
     this.change(this.drafts.get(id)!, { kind: 'move', beforeId }, () => {});
+  }
+
+  transferState() {
+    return { library: this.library, categoryId: this.session.selected[this.session.activeType], type: this.session.activeType,
+      hasDrafts: [...this.drafts.values()].some(state => state.data.dirtyName || state.data.dirtyText || state.busy),
+      available: !this.loading && !this.error };
+  }
+  async flushAll(): Promise<void> {
+    this.view.capturePosition();
+    const states = [...this.drafts.values()];
+    for (const state of states) { clearTimeout(state.timer); this.rename(state); this.saveText(state); }
+    await Promise.all(states.map(state => state.work));
+  }
+  async lockTransfer(locked: boolean): Promise<void> {
+    this.transferLocked = locked;
+    this.view.element.querySelector<HTMLElement>('.ctrlem-db-workspace')!.inert = locked;
+    if (locked) {
+      for (const state of this.drafts.values()) clearTimeout(state.timer);
+      await Promise.all([...this.drafts.values()].map(state => state.work));
+    } else {
+      for (const state of this.drafts.values()) if (state.data.dirtyText && !state.conflict && !state.saveFailed) this.schedule(state);
+    }
+  }
+  imported(library: Library, categoryIds: string[], replace: boolean): void {
+    if (replace) {
+      for (const state of this.drafts.values()) clearTimeout(state.timer);
+      this.drafts.clear(); this.session.selected = {};
+    }
+    this.acceptLibrary(library);
+    if (!replace && categoryIds.length) {
+      const first = library.categories.find(category => category.id === categoryIds[0])!;
+      this.session.activeType = first.type; this.session.selected[first.type] = first.id;
+    }
+    this.ensureSelected(); this.persistSession(); this.render();
   }
 
   dispose(): void {

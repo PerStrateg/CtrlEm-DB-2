@@ -65,6 +65,21 @@ export class CommandFields {
     field.input.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
+  observeManualSend(send: (field: CommandField) => void): () => void {
+    const clicked = (event: MouseEvent) => {
+      // Browser-generated mouse/keyboard activation only. Programmatic clicks,
+      // including future scheduled sends, never enter capture.
+      if (!event.isTrusted || !(event.target instanceof this.document.defaultView!.Element)) return;
+      const button = event.target.closest<HTMLButtonElement>('.panel--commands button[data-send]');
+      if (!button || button.disabled) return;
+      const field = this.find().find(field => field.key === button.dataset.send);
+      if (!field || !field.input.validity.valid || button.form?.matches(':invalid')) return;
+      send(field);
+    };
+    this.document.addEventListener('click', clicked, true);
+    return () => this.document.removeEventListener('click', clicked, true);
+  }
+
   observe(changed: () => void): () => void {
     const observer = new this.document.defaultView!.MutationObserver(changed);
     observer.observe(this.document, { childList: true, subtree: true, attributes: true,

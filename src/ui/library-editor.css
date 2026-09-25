@@ -59,6 +59,11 @@
 .ctrlem-db-session-warning, .ctrlem-db-conflict { color: var(--warning); }
 .ctrlem-db-session-warning { margin-bottom: 12px; }
 .ctrlem-db-delete { margin-top: 16px; }
+.ctrlem-db-transfer { margin-top: 16px; border-top: 1px solid var(--border-color); overflow-wrap: anywhere; }
+.ctrlem-db-transfer fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.ctrlem-db-transfer-panel { padding: 8px; background: var(--bg-secondary); }
+.ctrlem-db-transfer-panel > button { margin: 4px; }
+.ctrlem-db-transfer-panel ul { max-height: 200px; overflow-y: auto; padding-left: 20px; }
 @container (max-width: 480px) {
   .ctrlem-db-tabpanel { grid-template-columns: minmax(0, 1fr); }
 }

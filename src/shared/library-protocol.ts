@@ -1,10 +1,12 @@
-import { z } from 'zod';
+import { z } from './validation';
 import { pickerRequests } from './picker-protocol';
 import { contentTypes } from '../model/library';
 import type { Library, LibraryChange, ChangeResult } from '../model/library';
-
-// Extension CSP forbids dynamic code generation, including capability probes.
-z.config({ jitless: true });
+import { libraryFileSchema } from '../model/library-file';
+import type { ImportMode, ImportResult, LibraryFile } from '../model/library-file';
+import type { CaptureResult } from '../model/input-capture';
+import { commandKeys } from '../model/commands';
+import type { CommandKey } from '../model/commands';
 
 const id = z.string().uuid();
 const revision = z.number().int().nonnegative();
@@ -42,6 +44,8 @@ export const requestSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('library:load') }).strict(),
   z.object({ type: z.literal('library:change'), change: changeSchema }).strict(),
   z.object({ type: z.literal('library:session'), session: sessionSchema }).strict(),
+  z.object({ type: z.literal('library:capture'), command: z.enum(commandKeys), value: z.string() }).strict(),
+  z.object({ type: z.literal('library:import'), file: libraryFileSchema, mode: z.enum(['append', 'replace']), baseRevision: revision }).strict(),
 ]);
 export type LibraryRequest = z.infer<typeof requestSchema>;
 export type Reply<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -51,4 +55,8 @@ export interface LibraryClient {
   change(change: LibraryChange): Promise<ChangeResult>;
   saveSession(session: EditorSession): Promise<void>;
   subscribe(listener: (library: Library) => void): () => void;
+}
+export interface CaptureClient { capture(command: CommandKey, value: string): Promise<CaptureResult> }
+export interface TransferClient {
+  import(file: LibraryFile, mode: ImportMode, baseRevision: number): Promise<ImportResult>;
 }
