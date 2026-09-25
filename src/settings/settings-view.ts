@@ -31,6 +31,14 @@ export async function mountSettings(document: Document, client: CredentialsClien
     const help = document.createElement('p');
     help.id = `${field.id}-help`;
     help.textContent = field.description;
+    if ('link' in field) {
+      const link = document.createElement('a');
+      link.textContent = field.link.label;
+      link.href = field.link.url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      help.append(' ', link);
+    }
     const input = document.createElement('input');
     input.id = field.id;
     input.type = 'password';

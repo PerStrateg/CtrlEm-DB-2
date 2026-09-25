@@ -8,6 +8,7 @@ export interface SiteGallery { available: boolean; pending: boolean; failed: boo
 /** The only picker component that knows native command and gallery markup. */
 export class CommandFields {
   private readonly hiddenGalleries = new Set<HTMLElement>();
+  private readonly hiddenUploadNodes = new Set<HTMLElement>();
   constructor(readonly document: Document) {}
 
   syncGalleryVisibility(fields: CommandField[]): void {
@@ -41,8 +42,35 @@ export class CommandFields {
   }
 
   mountUpload(field: CommandField, element: HTMLElement): void {
-    const picker = field.input.nextElementSibling;
-    if (picker?.classList.contains('ctrlem-db-picker') && picker.nextElementSibling !== element) picker.after(element);
+    const anchor = this.nativeUpload(field.key) ?? field.input.previousElementSibling?.closest('.cmd-label') ?? field.input;
+    if (anchor.previousElementSibling !== element) anchor.before(element);
+  }
+
+  private nativeUpload(key: CommandKey): HTMLElement | null {
+    return this.document.querySelector(`.upload-dropzone[data-upload-for="${key}"]`);
+  }
+  hasNativeUpload(key: CommandKey): boolean { return Boolean(this.nativeUpload(key)); }
+  setCustomUpload(key: CommandKey, active: boolean): void {
+    const nodes = [this.nativeUpload(key), ...(key === 'popupSound' ? [this.document.getElementById('sound-preview')] : [])];
+    for (const node of nodes) {
+      if (!node) continue;
+      node.classList.toggle('ctrlem-db-upload-hidden', active);
+      if (active) this.hiddenUploadNodes.add(node);
+      else this.hiddenUploadNodes.delete(node);
+    }
+  }
+  restoreUploads(): void {
+    for (const node of this.hiddenUploadNodes) node.classList.remove('ctrlem-db-upload-hidden');
+    this.hiddenUploadNodes.clear();
+  }
+  observeFieldEdits(changed: (key: CommandKey) => void): () => void {
+    const listener = (event: Event) => {
+      const field = this.find().find(field => field.input === event.target);
+      if (field) changed(field.key);
+    };
+    this.document.addEventListener('input', listener);
+    this.document.addEventListener('change', listener);
+    return () => { this.document.removeEventListener('input', listener); this.document.removeEventListener('change', listener); };
   }
 
   gallery(key: CommandKey): SiteGallery {

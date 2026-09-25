@@ -1,46 +1,51 @@
+import { UploadError } from '../shared/upload-errors';
 import { commands } from '../model/commands';
 import type { CommandKey } from '../model/commands';
-import { emptyLibrary, formatItems } from '../model/library';
-import type { ContentType, Library } from '../model/library';
-import type { LibraryClient } from '../shared/library-protocol';
+import type { UploadLibraryClient } from '../shared/library-protocol';
+import type { PickerContextSource } from '../shared/picker-protocol';
 import { CommandFields } from '../site/command-fields';
+import type { CommandField } from '../site/command-fields';
 import { FileUploadView } from '../ui/file-upload';
 import type { UploadRow } from '../ui/file-upload';
-import { providers, uploadFileError } from './providers';
-import type { ProviderId } from './providers';
+import { providerForType, uploadFileError } from './providers';
 import type { UploadClient } from './extension-upload-client';
 
-interface UploadState { view: FileUploadView; rows: UploadRow[] }
+type UploadCommand = 'popupImage' | 'changeWallpaper' | 'popupSound' | 'videoOverlay';
+interface UploadJob extends UploadRow { fieldVersion: number; fieldValue: string }
+interface UploadState { key: UploadCommand; field: CommandField; view: FileUploadView; rows: UploadJob[]; fieldVersion: number }
+
 export class UploadController {
   private readonly states = new Map<CommandKey, UploadState>();
-  private library = emptyLibrary();
-  private imgbbReady = false;
-  private error = '';
-  private loading = true;
+  private readonly pending: { state: UploadState; row: UploadJob }[] = [];
+  private hasImgBBKey = false;
+  private settingsRevision = 0;
+  private stopSettings?: () => void;
+  private settingsError = '';
+  private loadingSettings = true;
   private running = false;
   private disposed = false;
   private stopObserving?: () => void;
+  private stopEdits?: () => void;
   private unsubscribe?: () => void;
   private readonly abort = new AbortController();
 
-  constructor(private readonly page: CommandFields, private readonly libraryClient: LibraryClient,
-    private readonly client: UploadClient, private readonly settings: (initiator: HTMLElement, back: () => void) => void,
-    private readonly create: (type: ContentType, initiator: HTMLElement) => void) {}
+  constructor(private readonly page: CommandFields, private readonly library: UploadLibraryClient,
+    private readonly client: UploadClient, private readonly picker: PickerContextSource,
+    private readonly settings: (initiator: HTMLElement, back: () => void) => void) {}
 
   start(): void {
-    this.unsubscribe = this.libraryClient.subscribe(library => { this.accept(library); this.render(); });
+    this.stopSettings = this.client.subscribeSettings?.(() => { void this.refreshSettings(); });
+    this.unsubscribe = this.picker.subscribeContext(() => this.render());
+    this.stopEdits = this.page.observeFieldEdits(key => { const state = this.states.get(key); if (state) state.fieldVersion++; });
     this.stopObserving = this.page.observe(() => this.reconcile());
-    this.reconcile();
-    void this.refresh();
+    this.reconcile(); void this.refreshSettings();
   }
-  private accept(library: Library): void { if (library.revision >= this.library.revision) this.library = library; }
-  private async refresh(): Promise<void> {
-    this.loading = true; this.error = ''; this.render();
-    try {
-      const [loaded, ready] = await Promise.all([this.libraryClient.load(), this.client.ready()]);
-      this.accept(loaded.library); this.imgbbReady = ready;
-    } catch { this.error = 'Couldn’t load library or provider settings. Retry loading.'; }
-    finally { this.loading = false; this.render(); }
+  private async refreshSettings(): Promise<void> {
+    const revision = ++this.settingsRevision;
+    this.loadingSettings = true; this.settingsError = ''; this.render();
+    try { const hasKey = await this.client.ready(); if (revision === this.settingsRevision) this.hasImgBBKey = hasKey; }
+    catch { if (revision === this.settingsRevision) this.settingsError = 'Couldn’t load ImgBB settings. Retry loading.'; }
+    finally { if (revision === this.settingsRevision) { this.loadingSettings = false; this.render(); } }
   }
   private reconcile(): void {
     if (this.disposed) return;
@@ -51,75 +56,98 @@ export class UploadController {
       let state = this.states.get(field.key);
       if (!state) {
         const view = new FileUploadView(this.page.document, type, {
-          files: files => {
-            const state = this.states.get(field.key)!;
-            const provider = view.provider.value as ProviderId;
-            for (const file of files) {
-              const error = uploadFileError(provider, type, file);
-              state.rows.push({ id: crypto.randomUUID(), file, provider, status: error ? 'Failed' : 'Waiting', error });
-            }
-            this.render();
+          files: files => this.choose(this.states.get(field.key)!, files),
+          retry: id => {
+            const current = this.states.get(field.key)!;
+            const row = current.rows.find(row => row.id === id)!;
+            if (row.status !== 'Failed') return;
+            row.status = 'Waiting'; row.error = undefined;
+            this.pending.push({ state: current, row }); this.render(); void this.drain();
           },
-          start: () => { void this.run(this.states.get(field.key)!); },
-          retry: id => { void this.run(this.states.get(field.key)!, id); },
-          add: id => { void this.add(this.states.get(field.key)!, id); },
-          settings: initiator => this.settings(initiator, () => { void this.refresh(); }),
-          create: initiator => this.create(type, initiator),
-          refresh: () => { void this.refresh(); },
+          save: id => { const current = this.states.get(field.key)!; void this.save(current, current.rows.find(row => row.id === id)!); },
+          settings: initiator => this.settings(initiator, () => { void this.refreshSettings(); }),
+          refresh: () => { void this.refreshSettings(); },
         });
-        state = { view, rows: [] }; this.states.set(field.key, state); this.render();
+        state = { key: field.key as UploadCommand, field, view, rows: [], fieldVersion: 0 };
+        this.states.set(field.key, state);
       }
+      if (state.field.input !== field.input) state.fieldVersion++;
+      state.field = field;
       this.page.mountUpload(field, state.view.element);
     }
     for (const [key, state] of this.states) if (!fields.some(field => field.key === key)) state.view.element.remove();
+    this.render();
   }
   private render(): void {
     if (this.disposed) return;
-    for (const { view, rows } of this.states.values()) {
-      const missingKey = view.provider.value === 'imgbb' && !this.imgbbReady;
-      const limit = providers[view.provider.value as ProviderId].maxBytes / 1024 / 1024;
-      const message = this.loading ? 'Loading…' : this.error || (missingKey ? 'ImgBB needs an API key. Select Set up provider.'
-        : `Up to ${limit} MB per file. Upload sends files to ${providers[view.provider.value as ProviderId].label}. Select a ready URL to copy it.`);
-      view.render(this.library.categories.filter(category => category.type === view.type), rows, this.running,
-        message, this.loading || Boolean(this.error) || missingKey);
+    for (const state of this.states.values()) {
+      const context = this.picker.context(state.key);
+      const image = state.view.type === 'image';
+      this.page.setCustomUpload(state.key, Boolean(context.category));
+      state.view.render(state.rows, context.category?.id, context.loading || (image && this.loadingSettings),
+        context.loadError ? 'Couldn’t load library. Use Retry in the picker.' : image ? this.settingsError : '',
+        image && !this.loadingSettings && !this.settingsError && !this.hasImgBBKey);
     }
   }
-  private async run(state: UploadState, retryId?: string): Promise<void> {
-    if (this.running || this.loading || this.error) return;
+  private choose(state: UploadState, files: File[]): void {
+    const context = this.picker.context(state.key);
+    if (!context.category || context.loading || context.loadError) return;
+    if (state.view.type === 'image' && (this.loadingSettings || this.settingsError)) return;
+    const provider = providerForType[state.view.type];
+    for (const file of files) {
+      const error = uploadFileError(provider, state.view.type, file);
+      const row: UploadJob = { id: crypto.randomUUID(), file, provider, categoryId: context.category.id,
+        categoryName: context.category.name, status: error ? 'Failed' : 'Waiting', error,
+        fieldVersion: state.fieldVersion, fieldValue: state.field.input.value };
+      state.rows.push(row);
+      if (!error) this.pending.push({ state, row });
+    }
+    this.render(); void this.drain();
+  }
+  private async drain(): Promise<void> {
+    if (this.running || this.disposed) return;
     this.running = true;
-    const rows = state.rows.filter(row => retryId ? row.id === retryId && row.status === 'Failed' : row.status === 'Waiting');
-    for (const row of rows) {
-      if (this.disposed) break;
+    while (this.pending.length && !this.disposed) {
+      const { state, row } = this.pending.shift()!;
       const error = uploadFileError(row.provider, state.view.type, row.file);
-      if (error) { row.error = error; row.status = 'Failed'; continue; }
+      if (error) { row.error = error; row.status = 'Failed'; this.render(); continue; }
       row.status = 'Uploading'; row.error = undefined; this.render();
       try {
         row.url = await this.client.upload(row.provider, state.view.type, row.file, this.abort.signal);
-        row.status = 'Ready';
-      } catch { row.status = 'Failed'; row.error = 'Couldn’t upload. Check settings and connection, then Retry. The provider may have received this file.'; }
-      this.render();
+      } catch (error) {
+        row.status = 'Failed'; row.error = error instanceof UploadError ? error.message : 'Couldn’t upload. The provider may have received this file. Retry upload if needed.';
+        this.render(); continue;
+      }
+      if (!this.disposed) await this.save(state, row);
     }
     this.running = false; this.render();
   }
-  private async add(state: UploadState, id: string): Promise<void> {
-    const row = state.rows.find(row => row.id === id)!;
-    const category = this.library.categories.find(category => category.id === state.view.category.value && category.type === state.view.type);
-    if (!row.url || row.adding || !category) return;
-    row.error = undefined;
-    if (category.items.some(item => item.value === row.url)) { row.added = category.name; this.render(); return; }
-    row.adding = true; this.render();
+  private async save(state: UploadState, row: UploadJob): Promise<void> {
+    if (!row.url || row.status === 'Saving' || row.status === 'Saved' || this.disposed) return;
+    row.status = 'Saving'; row.error = undefined; this.render();
     try {
-      const result = await this.libraryClient.change({ kind: 'update', id: category.id, baseRevision: category.revision,
-        text: formatItems([...category.items, { id: crypto.randomUUID(), value: row.url, label: row.file.name.replace(/\s+/g, ' ') }]) });
-      this.accept(result.library);
-      if (result.status === 'saved') row.added = category.name;
-      else row.error = 'Category changed. Review the target and Add to category again.';
-    } catch { row.error = 'Couldn’t add to category. The link is still available. Try Add to category again.'; }
-    finally { row.adding = false; this.render(); }
+      const result = await this.library.addUpload(state.key, { categoryId: row.categoryId, value: row.url, label: row.file.name });
+      if (this.disposed) return;
+      if (result.status === 'missing') {
+        row.status = 'Save failed'; row.error = 'Original category was deleted. Copy this URL into another category.';
+      } else {
+        row.status = 'Saved';
+        if (this.picker.context(state.key).category?.id === row.categoryId &&
+            state.fieldVersion === row.fieldVersion && state.field.input.value === row.fieldValue && state.field.input.isConnected) {
+          const version = state.fieldVersion;
+          this.page.fill(state.field, { id: row.id, value: row.url }, false);
+          // Own fills may advance the next file in the same batch; user edits never do.
+          for (const other of state.rows) if (other.categoryId === row.categoryId && other.fieldVersion === version) {
+            other.fieldVersion = state.fieldVersion; other.fieldValue = row.url;
+          }
+        }
+      }
+    } catch { row.status = 'Save failed'; row.error = 'Couldn’t save the link. Retry save without uploading again.'; }
+    finally { this.render(); }
   }
   dispose(): void {
-    this.disposed = true; this.abort.abort(); this.stopObserving?.(); this.unsubscribe?.();
+    this.disposed = true; this.abort.abort(); this.stopObserving?.(); this.stopEdits?.(); this.unsubscribe?.(); this.stopSettings?.();
     for (const state of this.states.values()) state.view.element.remove();
-    this.states.clear();
+    this.page.restoreUploads(); this.states.clear(); this.pending.length = 0;
   }
 }

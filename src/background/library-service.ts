@@ -29,6 +29,7 @@ export class LibraryService {
           : this.selections.save(receiver, request.command, request.selection);
       }
       case 'library:load': return { library: await this.library.read(), session: await this.sessions.read(tabId) };
+      case 'library:add-upload': return this.library.addUpload(commands[request.command].type, request.addition);
       case 'library:change': return this.library.change(request.change);
       case 'library:session': return this.sessions.save(tabId, request.session);
       case 'library:capture': return this.library.capture(commands[request.command].type, request.value);

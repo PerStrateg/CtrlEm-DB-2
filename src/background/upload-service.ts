@@ -1,3 +1,4 @@
+import { UploadError } from '../shared/upload-errors';
 import { uploadMessage } from '../shared/upload-protocol';
 import type { UploadMessage, UploadReply } from '../shared/upload-protocol';
 import { uploadFile, uploadFileError } from '../upload/providers';
@@ -34,14 +35,20 @@ export class UploadSession {
         this.uploading = true;
         const file = new File(this.parts, this.metadata.name, { type: this.metadata.mime });
         this.parts = [];
-        const credentials = await this.credentials.read();
+        const provider = this.metadata.provider;
+        const credentials = { imgbb: '', catbox: '' };
+        if (provider !== 'vidhosting') {
+          try { credentials[provider] = await this.credentials.readField(provider); }
+          catch { throw new UploadError({ stage: 'settings', code: 'unavailable' }); }
+        }
         const url = await uploadFile(this.metadata.provider, file, credentials, this.abort.signal, this.request);
         this.closed = true;
         return { ok: true, url };
       }
       return { ok: true };
-    } catch {
+    } catch (error) {
       this.close();
+      if (error instanceof UploadError) return { ok: false, error: error.message, failure: error.failure };
       return { ok: false, error: 'Couldn’t upload this file. Check provider settings and connection, then Retry. The provider may have received it.' };
     }
   }

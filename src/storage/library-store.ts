@@ -7,6 +7,8 @@ import type { CaptureResult } from '../model/input-capture';
 import { planImport } from '../model/library-file';
 import type { ImportMode, ImportResult, LibraryFile } from '../model/library-file';
 import type { ContentType } from '../model/library';
+import { addUploadedItem } from '../model/upload-addition';
+import type { UploadAddition, UploadAdditionResult } from '../model/upload-addition';
 
 export interface StorageArea {
   get(key: string): Promise<Record<string, unknown>>;
@@ -29,6 +31,12 @@ export class LibraryRepository {
   async change(change: LibraryChange): Promise<ChangeResult> {
     const result = applyChange(await this.read(), change);
     if (result.status === 'saved') await this.storage.set({ [libraryKey]: result.library });
+    return result;
+  }
+  async addUpload(type: ContentType, addition: UploadAddition): Promise<UploadAdditionResult> {
+    const current = await this.read();
+    const result = addUploadedItem(current, type, addition);
+    if (result.library.revision !== current.revision) await this.storage.set({ [libraryKey]: result.library });
     return result;
   }
   async capture(type: ContentType, value: string): Promise<CaptureResult> {

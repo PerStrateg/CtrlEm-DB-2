@@ -33,9 +33,8 @@ const pickers = new PickerController(fields, client, (type, id, create, initiato
   editor.openCategory(type, id, create);
 });
 const capture = new CaptureController(fields, client, (key, value) => pickers.isDefaultValue(key, value));
-const uploads = new UploadController(fields, client, new ExtensionUploadClient(),
-  (initiator, back) => shell.openSettings(initiator, back),
-  (type, initiator) => { shell.openFrom(initiator); editor.openCategory(type, undefined, true); });
+const uploads = new UploadController(fields, client, new ExtensionUploadClient(), pickers,
+  (initiator, back) => shell.openSettings(initiator, back));
 runtime.ctrlEmLibraryController = { dispose: () => { uploads.dispose(); capture.dispose(); transfer?.dispose(); pickers.dispose(); editor.dispose(); shell.dispose(); } };
 shell.start();
 editor.start();

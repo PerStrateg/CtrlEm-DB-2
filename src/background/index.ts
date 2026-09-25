@@ -31,7 +31,15 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
   if (authorizedSettings(sender, chrome.runtime.id, chrome.runtime.getURL('settings.html'))) {
     void credentialsQueue.run(async () => {
       const request = credentialsRequest.parse(message);
-      return request.type === 'credentials:load' ? credentials.read() : credentials.save(request.field, request.value);
+      if (request.type === 'credentials:load') return credentials.read();
+      await credentials.save(request.field, request.value);
+      if (request.field === 'imgbb') {
+        // Notification failure must not turn a completed credential save into an error.
+        void chrome.tabs.query({ url: 'https://ctrlem.com/u/*' }).then(tabs =>
+          Promise.all(tabs.map(tab => tab.id === undefined ? undefined :
+            chrome.tabs.sendMessage(tab.id, { type: 'upload:settings-changed' }).catch(() => undefined)))
+        ).catch(() => console.warn('[CtrlEm DB] Could not notify provider settings change.'));
+      }
     }).then(value => respond({ ok: true, value }), () => respond({ ok: false, error: 'Couldn’t complete settings operation. Retry.' }));
     return true;
   }
@@ -41,8 +49,8 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
     return false;
   }
   if (uploadReadyRequest.safeParse(message).success) {
-    void credentialsQueue.run(() => credentials.read()).then(
-      value => respond({ ok: true, value: Boolean(value.imgbb) }),
+    void credentialsQueue.run(() => credentials.readField('imgbb')).then(
+      value => respond({ ok: true, value: Boolean(value) }),
       () => respond({ ok: false, error: 'Couldn’t load provider settings.' }),
     );
     return true;
@@ -52,7 +60,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
       const receiver = new URL(sender.url!).pathname.split('/')[2]!;
       const value = await service.handle(tabId, message, receiver);
       respond({ ok: true, value });
-      if (['library:change', 'library:capture', 'library:import'].includes((message as { type: string }).type)) {
+      if (['library:change', 'library:capture', 'library:import', 'library:add-upload'].includes((message as { type: string }).type)) {
         const result = value as Pick<ChangeResult, 'library'> & { status: string };
         if (result.status === 'saved') {
           try {

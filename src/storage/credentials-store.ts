@@ -34,7 +34,7 @@ export class CredentialsRepository {
     return { imgbb: await this.readField('imgbb'), catbox: await this.readField('catbox') };
   }
 
-  private async readField(field: CredentialId): Promise<string> {
+  async readField(field: CredentialId): Promise<string> {
     const name = `ctrlem.credentials.${field}`;
     const data = (await this.storage.get(name))[name] as { iv: number[]; ciphertext: number[] } | undefined;
     if (data === undefined) return '';

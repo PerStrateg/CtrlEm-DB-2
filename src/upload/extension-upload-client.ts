@@ -1,3 +1,4 @@
+import { UploadError } from '../shared/upload-errors';
 import { uploadPortName, uploadChunkBytes, uploadKeepAliveMs, uploadTimeoutMs } from '../shared/upload-protocol';
 import type { UploadMessage, UploadReply } from '../shared/upload-protocol';
 import type { ProviderId, UploadType } from './providers';
@@ -5,10 +6,17 @@ import type { Reply } from '../shared/library-protocol';
 
 export interface UploadClient {
   ready(): Promise<boolean>;
+  subscribeSettings?(listener: () => void): () => void;
   upload(provider: ProviderId, media: UploadType, file: File, signal: AbortSignal): Promise<string>;
 }
 
 export class ExtensionUploadClient implements UploadClient {
+  subscribeSettings(listener: () => void): () => void {
+    const onChange = (message: { type?: string }) => { if (message.type === 'upload:settings-changed') listener(); };
+    chrome.runtime.onMessage.addListener(onChange);
+    return () => chrome.runtime.onMessage.removeListener(onChange);
+  }
+
   async ready(): Promise<boolean> {
     const reply: Reply<boolean> = await chrome.runtime.sendMessage({ type: 'upload:ready' });
     if (!reply.ok) throw new Error('Couldn’t load provider settings.');
@@ -21,7 +29,7 @@ export class ExtensionUploadClient implements UploadClient {
     let disconnected = false;
     const fail = () => {
       disconnected = true;
-      pending?.reject(new Error('Upload interrupted. The provider may have received the file. Retry only if needed.'));
+      pending?.reject(new UploadError({ stage: 'transfer', code: 'interrupted' }));
     };
     port.onDisconnect.addListener(fail);
     port.onMessage.addListener((reply: UploadReply) => { pending?.resolve(reply); pending = undefined; });
@@ -30,9 +38,9 @@ export class ExtensionUploadClient implements UploadClient {
     const heartbeat = setInterval(() => { if (!disconnected) port.postMessage({ type: 'ping' }); }, uploadKeepAliveMs);
     const timeout = setTimeout(stop, uploadTimeoutMs);
     const send = async (message: UploadMessage) => {
-      if (disconnected || signal.aborted) throw new Error('Upload interrupted.');
+      if (disconnected || signal.aborted) throw new UploadError({ stage: 'transfer', code: 'interrupted' });
       const reply = await new Promise<UploadReply>((resolve, reject) => { pending = { resolve, reject }; port.postMessage(message); });
-      if (!reply.ok) throw new Error(reply.error);
+      if (!reply.ok) throw reply.failure ? new UploadError(reply.failure) : new Error(reply.error);
       return reply;
     };
     try {
@@ -42,7 +50,7 @@ export class ExtensionUploadClient implements UploadClient {
         const data = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve((reader.result as string).split(',')[1]!);
-          reader.onerror = () => reject(new Error('Couldn’t read file.'));
+          reader.onerror = () => reject(new UploadError({ stage: 'transfer', code: 'file-read' }));
           reader.readAsDataURL(file.slice(offset, offset + uploadChunkBytes));
         });
         await send({ type: 'chunk', data });

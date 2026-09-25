@@ -1,8 +1,8 @@
 import { z } from './validation';
 
 export const credentialFields = [
-  { id: 'imgbb', label: 'ImgBB API key', description: 'Required to upload images to ImgBB.' },
-  { id: 'catbox', label: 'Catbox userhash', description: 'Optional. Associate sound and video uploads with your Catbox account.' },
+  { id: 'imgbb', label: 'ImgBB API key', description: 'Optional. Use your own API key for more reliable uploads.', link: { label: 'Get API key', url: 'https://api.imgbb.com/' } },
+  { id: 'catbox', label: 'Catbox userhash', description: 'Optional. Saves uploads to your Catbox account.' },
 ] as const;
 export type CredentialId = typeof credentialFields[number]['id'];
 export const credentialsRequest = z.discriminatedUnion('type', [

@@ -7,6 +7,7 @@ import type { ImportMode, ImportResult, LibraryFile } from '../model/library-fil
 import type { CaptureResult } from '../model/input-capture';
 import { commandKeys } from '../model/commands';
 import type { CommandKey } from '../model/commands';
+import type { UploadAddition, UploadAdditionResult } from '../model/upload-addition';
 
 const id = z.string().uuid();
 const revision = z.number().int().nonnegative();
@@ -42,6 +43,8 @@ const changeSchema = z.discriminatedUnion('kind', [
 export const requestSchema = z.discriminatedUnion('type', [
   ...pickerRequests,
   z.object({ type: z.literal('library:load') }).strict(),
+  z.object({ type: z.literal('library:add-upload'), command: z.enum(['popupImage', 'changeWallpaper', 'popupSound', 'videoOverlay']),
+    addition: z.object({ categoryId: id, value: z.string().regex(/^https?:\/\/\S+$/), label: z.string() }).strict() }).strict(),
   z.object({ type: z.literal('library:change'), change: changeSchema }).strict(),
   z.object({ type: z.literal('library:session'), session: sessionSchema }).strict(),
   z.object({ type: z.literal('library:capture'), command: z.enum(commandKeys), value: z.string() }).strict(),
@@ -57,6 +60,9 @@ export interface LibraryClient {
   subscribe(listener: (library: Library) => void): () => void;
 }
 export interface CaptureClient { capture(command: CommandKey, value: string): Promise<CaptureResult> }
+export interface UploadLibraryClient {
+  addUpload(command: 'popupImage' | 'changeWallpaper' | 'popupSound' | 'videoOverlay', addition: UploadAddition): Promise<UploadAdditionResult>;
+}
 export interface TransferClient {
   import(file: LibraryFile, mode: ImportMode, baseRevision: number): Promise<ImportResult>;
 }

@@ -4,6 +4,7 @@ import { emptyLibrary } from '../model/library';
 import type { ContentType, Item, Library } from '../model/library';
 import type { LibraryClient } from '../shared/library-protocol';
 import type { PickerClient, PickerSelection, PickerSelections } from '../shared/picker-protocol';
+import type { PickerContext, PickerContextSource } from '../shared/picker-protocol';
 import { CommandFields } from '../site/command-fields';
 import type { CommandField, SiteGallery } from '../site/command-fields';
 import { ContentPickerView } from '../ui/content-picker';
@@ -18,7 +19,9 @@ interface PickerState {
 const emptyGallery = (): SiteGallery => ({ available: false, pending: false, failed: false, items: [] });
 type OpenEditor = (type: ContentType, id: string | undefined, create: boolean, initiator: HTMLElement) => void;
 
-export class PickerController {
+export class PickerController implements PickerContextSource {
+  private readonly contextListeners = new Set<() => void>();
+  private readonly contextSignatures = new Map<CommandKey, string>();
   private library: Library = emptyLibrary();
   private selections: PickerSelections = {};
   private readonly states = new Map<CommandKey, PickerState>();
@@ -31,6 +34,16 @@ export class PickerController {
 
   constructor(private readonly page: CommandFields, private readonly client: LibraryClient & PickerClient,
     private readonly openEditor: OpenEditor) { this.preview = new MediaPreview(page.document); }
+
+  context(command: CommandKey): PickerContext {
+    const state = this.states.get(command);
+    return { category: state ? this.category(state) : undefined, selection: { ...state?.selection },
+      loading: this.loading, loadError: this.loadError };
+  }
+  subscribeContext(listener: () => void): () => void {
+    this.contextListeners.add(listener);
+    return () => this.contextListeners.delete(listener);
+  }
 
   start(): void {
     this.unsubscribe = this.client.subscribe(library => { this.accept(library); this.renderAll(); });
@@ -58,7 +71,8 @@ export class PickerController {
     const fields = this.page.find();
     this.page.syncGalleryVisibility(fields);
     for (const field of fields) {
-      const gallery = commands[field.key].type === 'image' ? this.page.gallery(field.key) : emptyGallery();
+      const gallery = commands[field.key].type === 'image' ? this.page.gallery(field.key)
+        : field.key === 'popupSound' ? { ...emptyGallery(), available: this.page.hasNativeUpload(field.key) } : emptyGallery();
       const signature = JSON.stringify(gallery);
       let state = this.states.get(field.key);
       if (!state) {
@@ -136,10 +150,15 @@ export class PickerController {
       image: type === 'image', previews: this.category(state)?.previewsEnabled ?? true, previewBusy: state.previewBusy,
       mediaType: type === 'sound' || type === 'video' ? type : undefined,
       emptyMessage: state.selection.categoryId === 'default'
-        ? state.gallery.failed ? 'Couldn’t load site images. Reopen the command to retry.'
+        ? type === 'sound' ? 'Upload a sound or paste a URL.' : state.gallery.failed ? 'Couldn’t load site images. Reopen the command to retry.'
           : state.gallery.pending ? 'Open the command to load site images.' : 'No items yet. Create category to add images.'
         : undefined });
     if (hadSelection && previousSelection !== JSON.stringify(state.selection)) this.persistSelection(state);
+    const signature = JSON.stringify([state.selection.categoryId, this.category(state)?.revision, this.loading, this.loadError]);
+    if (this.contextSignatures.get(state.field.key) !== signature) {
+      this.contextSignatures.set(state.field.key, signature);
+      for (const listener of this.contextListeners) listener();
+    }
   }
 
   private selectCategory(key: CommandKey, id: string): void {

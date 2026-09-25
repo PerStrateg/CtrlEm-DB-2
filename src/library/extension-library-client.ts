@@ -5,6 +5,7 @@ import type { LoadedPicker, PickerClient, PickerSelection } from '../shared/pick
 import type { CaptureClient, TransferClient } from '../shared/library-protocol';
 import type { CaptureResult } from '../model/input-capture';
 import type { ImportMode, ImportResult, LibraryFile } from '../model/library-file';
+import type { UploadAddition, UploadAdditionResult } from '../model/upload-addition';
 
 export class ExtensionLibraryClient implements LibraryClient, PickerClient, CaptureClient, TransferClient {
   private async request<T>(request: LibraryRequest): Promise<T> {
@@ -13,6 +14,9 @@ export class ExtensionLibraryClient implements LibraryClient, PickerClient, Capt
     return reply.value;
   }
   load(): Promise<LoadedLibrary> { return this.request({ type: 'library:load' }); }
+  addUpload(command: 'popupImage' | 'changeWallpaper' | 'popupSound' | 'videoOverlay', addition: UploadAddition): Promise<UploadAdditionResult> {
+    return this.request({ type: 'library:add-upload', command, addition });
+  }
   capture(command: CommandKey, value: string): Promise<CaptureResult> { return this.request({ type: 'library:capture', command, value }); }
   import(file: LibraryFile, mode: ImportMode, baseRevision: number): Promise<ImportResult> {
     return this.request({ type: 'library:import', file, mode, baseRevision });

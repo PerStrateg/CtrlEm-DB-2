@@ -1,7 +1,18 @@
 import { z } from './validation';
 import { commandKeys } from '../model/commands';
 import type { CommandKey } from '../model/commands';
-import type { Library } from '../model/library';
+import type { Category, Library } from '../model/library';
+
+export interface PickerContext {
+  category?: Category;
+  selection: PickerSelection;
+  loading: boolean;
+  loadError: boolean;
+}
+export interface PickerContextSource {
+  context(command: CommandKey): PickerContext;
+  subscribeContext(listener: () => void): () => void;
+}
 
 export const selectionSchema = z.object({
   categoryId: z.union([z.string().uuid(), z.literal('default')]).optional(),
