@@ -8,6 +8,7 @@ export class LibraryShell {
   private readonly settings: HTMLDivElement;
   private readonly libraryButton: HTMLButtonElement;
   private readonly settingsButton: HTMLButtonElement;
+  private readonly back: HTMLButtonElement;
 
   constructor(document: Document) {
     this.element = document.createElement('section');
@@ -36,6 +37,10 @@ export class LibraryShell {
     this.settingsButton.textContent = 'Settings';
     this.settings = document.createElement('div');
     this.settings.className = 'ctrlem-db-settings';
+    this.back = document.createElement('button');
+    this.back.type = 'button';
+    this.back.textContent = 'Back to upload';
+    this.back.hidden = true;
     this.libraryButton.onclick = () => this.showCategories();
     this.settingsButton.onclick = () => {
       if (!this.settings.firstChild) {
@@ -49,7 +54,8 @@ export class LibraryShell {
       this.libraryButton.setAttribute('aria-pressed', 'false');
       this.settingsButton.setAttribute('aria-pressed', 'true');
     };
-    navigation.append(this.libraryButton, this.settingsButton);
+    this.libraryButton.type = this.settingsButton.type = 'button';
+    navigation.append(this.libraryButton, this.settingsButton, this.back);
     this.element.append(header, navigation, this.content, this.settings);
     this.showCategories();
   }
@@ -59,6 +65,13 @@ export class LibraryShell {
     this.settings.hidden = true;
     this.libraryButton.setAttribute('aria-pressed', 'true');
     this.settingsButton.setAttribute('aria-pressed', 'false');
+    this.back.hidden = true;
+  }
+
+  showSettings(back: () => void): void {
+    this.settingsButton.click();
+    this.back.hidden = false;
+    this.back.onclick = back;
   }
 
   setOpen(open: boolean): void {

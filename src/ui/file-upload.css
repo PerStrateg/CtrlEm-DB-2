@@ -1,0 +1,15 @@
+.ctrlem-db-upload { margin: 12px 0; padding: 8px; border: 1px solid var(--border-color); border-radius: var(--border-radius); font: inherit; font-size: .85rem; }
+.ctrlem-db-upload summary { cursor: pointer; }
+.ctrlem-db-upload label { display: block; margin-top: 8px; }
+.ctrlem-db-upload :is(input, select, button) { box-sizing: border-box; max-width: 100%; min-width: 0; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: var(--border-radius); background: var(--bg-tertiary); color: var(--text-primary); font: inherit; }
+.ctrlem-db-upload :is(input, select) { display: block; width: 100%; margin-top: 4px; background: var(--bg-primary); }
+.ctrlem-db-upload :is(button, summary):hover { color: var(--accent-primary); }
+.ctrlem-db-upload button { cursor: pointer; }
+.ctrlem-db-upload button:disabled { opacity: .5; cursor: not-allowed; }
+.ctrlem-db-upload :focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.ctrlem-db-upload-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ctrlem-db-upload p { overflow-wrap: anywhere; margin: 8px 0; }
+.ctrlem-db-upload ul { list-style: none; padding: 0; max-height: 300px; overflow: auto; }
+.ctrlem-db-upload li { border-top: 1px solid var(--border-color); padding: 8px 0; }
+.ctrlem-db-upload li button { margin: 6px 6px 0 0; }
+.ctrlem-db-upload [hidden] { display: none !important; }

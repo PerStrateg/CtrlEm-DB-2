@@ -6,11 +6,14 @@ import { PickerController } from '../library/picker-controller';
 import { CommandFields } from '../site/command-fields';
 import { CaptureController } from '../library/capture-controller';
 import { TransferController } from '../library/transfer-controller';
+import { UploadController } from '../upload/upload-controller';
+import { ExtensionUploadClient } from '../upload/extension-upload-client';
 import '../site/ctrlem-page.css';
 import '../ui/library.css';
 import '../ui/library-editor.css';
 import '../ui/content-picker.css';
 import '../ui/media-preview.css';
+import '../ui/file-upload.css';
 
 // This global belongs to the extension's isolated world, not the page's scripts.
 // Reinjection replaces the previous controller and releases its DOM bindings.
@@ -30,8 +33,12 @@ const pickers = new PickerController(fields, client, (type, id, create, initiato
   editor.openCategory(type, id, create);
 });
 const capture = new CaptureController(fields, client, (key, value) => pickers.isDefaultValue(key, value));
-runtime.ctrlEmLibraryController = { dispose: () => { capture.dispose(); transfer?.dispose(); pickers.dispose(); editor.dispose(); shell.dispose(); } };
+const uploads = new UploadController(fields, client, new ExtensionUploadClient(),
+  (initiator, back) => shell.openSettings(initiator, back),
+  (type, initiator) => { shell.openFrom(initiator); editor.openCategory(type, undefined, true); });
+runtime.ctrlEmLibraryController = { dispose: () => { uploads.dispose(); capture.dispose(); transfer?.dispose(); pickers.dispose(); editor.dispose(); shell.dispose(); } };
 shell.start();
 editor.start();
 pickers.start();
 capture.start();
+uploads.start();

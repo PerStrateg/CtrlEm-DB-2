@@ -40,6 +40,11 @@ export class CommandFields {
     });
   }
 
+  mountUpload(field: CommandField, element: HTMLElement): void {
+    const picker = field.input.nextElementSibling;
+    if (picker?.classList.contains('ctrlem-db-picker') && picker.nextElementSibling !== element) picker.after(element);
+  }
+
   gallery(key: CommandKey): SiteGallery {
     const gallery = this.document.getElementById(`gallery-${key}`);
     const items = Array.from(gallery?.querySelectorAll<HTMLElement>('.gallery-thumb-wrapper[data-upload-id]') ?? [])

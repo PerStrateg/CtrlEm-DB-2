@@ -33,6 +33,21 @@ export class LibraryController {
     this.shell.focus();
   }
 
+  openSettings(initiator: HTMLElement, back: () => void): void {
+    this.returnFocus = initiator;
+    this.open = true;
+    this.reconcile();
+    this.shell.showSettings(() => {
+      this.open = false;
+      this.reconcile();
+      if (initiator.isConnected) initiator.focus();
+      else this.launcher.focus();
+      this.returnFocus = undefined;
+      back();
+    });
+    this.shell.focus();
+  }
+
   start(): void {
     this.stopObserving?.();
     this.stopObserving = this.page.observe(() => this.reconcile());

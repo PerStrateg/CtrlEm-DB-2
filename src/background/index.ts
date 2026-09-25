@@ -5,9 +5,21 @@ import { SelectionRepository } from '../storage/selection-store';
 import { CredentialsRepository, openCredentialKey } from '../storage/credentials-store';
 import { authorizedSettings, credentialsRequest } from '../shared/credentials-protocol';
 import { WriteQueue } from '../storage/library-store';
+import { UploadSession } from './upload-service';
+import { uploadPortName, uploadReadyRequest } from '../shared/upload-protocol';
 
 const credentials = new CredentialsRepository(chrome.storage.local, openCredentialKey);
 const credentialsQueue = new WriteQueue();
+
+chrome.runtime.onConnect.addListener(port => {
+  if (port.name !== uploadPortName || !port.sender || authorizedTab(port.sender, chrome.runtime.id) === undefined) { port.disconnect(); return; }
+  const upload = new UploadSession(credentials);
+  let connected = true;
+  port.onMessage.addListener((input: unknown) => {
+    void upload.handle(input).then(reply => { if (connected && reply) port.postMessage(reply); });
+  });
+  port.onDisconnect.addListener(() => { connected = false; upload.close(); });
+});
 
 const service = new LibraryService(
   new LibraryRepository(chrome.storage.local), new EditorSessionRepository(chrome.storage.session),
@@ -27,6 +39,13 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
   if (tabId === undefined) {
     respond({ ok: false, error: 'Request not allowed.' });
     return false;
+  }
+  if (uploadReadyRequest.safeParse(message).success) {
+    void credentialsQueue.run(() => credentials.read()).then(
+      value => respond({ ok: true, value: Boolean(value.imgbb) }),
+      () => respond({ ok: false, error: 'Couldn’t load provider settings.' }),
+    );
+    return true;
   }
   void (async () => {
     try {
