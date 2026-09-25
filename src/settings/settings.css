@@ -9,7 +9,7 @@
   --border-radius: 8px;
   --accent-primary: #5865f2;
   color-scheme: dark;
-  font: 14px/1.5 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font: 16px/1.5 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: var(--bg-secondary);
   color: var(--text-primary);
 }
@@ -18,11 +18,6 @@ h1 { font-size: 18px; margin-top: 0; }
 section { border-top: 1px solid var(--border-color); padding: 16px 0; }
 label { display: block; font-weight: 600; }
 p { overflow-wrap: anywhere; color: var(--text-secondary); }
-input, button { box-sizing: border-box; color: inherit; border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 8px; font: inherit; }
-input { width: 100%; margin-bottom: 8px; background: var(--bg-primary); }
-button { cursor: pointer; background: var(--bg-tertiary); }
-button:hover { border-color: var(--accent-primary); }
-:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
-[hidden] { display: none !important; }
+input { width: 100%; margin-bottom: 8px; }
 
 a { color: var(--accent-primary); }

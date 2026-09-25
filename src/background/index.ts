@@ -9,6 +9,9 @@ import { UploadSession } from './upload-service';
 import { uploadPortName, uploadReadyRequest } from '../shared/upload-protocol';
 import { diagnosticUploadFetch } from './upload-network';
 import { catboxAccess } from '../shared/provider-access';
+import { registerAutoSend } from './auto-send-runtime';
+
+registerAutoSend();
 
 const credentials = new CredentialsRepository(chrome.storage.local, openCredentialKey);
 const credentialsQueue = new WriteQueue();
@@ -39,6 +42,7 @@ const service = new LibraryService(
 
 // Register listeners synchronously for service-worker/event-page wakeups.
 chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
+  if ((message as { type?: string })?.type?.startsWith('auto:')) return false;
   if (authorizedSettings(sender, chrome.runtime.id, chrome.runtime.getURL('settings.html'))) {
     void credentialsQueue.run(async () => {
       const request = credentialsRequest.parse(message);

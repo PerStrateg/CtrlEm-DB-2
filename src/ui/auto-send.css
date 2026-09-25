@@ -1,0 +1,22 @@
+.ctrlem-db-send-row { display: grid; grid-template-columns: minmax(0, 1fr) 64px 36px; align-items: center; gap: 6px; min-width: 0; }
+.ctrlem-db-auto-control { display: contents; }
+.ctrlem-db-send-row > button[data-send], .ctrlem-db-auto-control > :is(input, button) { height: 36px; min-height: 36px; margin: 0; box-sizing: border-box; min-width: 0; width: 100%; padding: 0 8px; }
+.ctrlem-db-auto-control input { text-align: center; padding: 0 3px; }
+.ctrlem-db-auto-control .ctrlem-db-auto-toggle { padding: 0; font-weight: 600; }
+.ctrlem-db-auto-toggle[aria-pressed='true'] { background: var(--accent-primary); color: var(--text-primary); }
+.ctrlem-db-auto-toggle[aria-busy='true'] { cursor: progress; }
+.ctrlem-db-auto-panel { position: fixed; right: 16px; bottom: 16px; width: min(320px, calc(100vw - 32px)); max-height: 35vh; z-index: 999; display: flex; flex-direction: column; box-sizing: border-box; border: 1px solid var(--border-color); border-radius: var(--border-radius); background: var(--bg-secondary); box-shadow: var(--shadow-lg); overflow: hidden; }
+.ctrlem-db-auto-panel header { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 8px 10px; }
+.ctrlem-db-auto-panel header strong { flex: 1; min-width: 0; font-size: .8rem; }
+.ctrlem-db-auto-panel button { min-height: 28px; padding: 3px 7px; font-size: .75rem; white-space: nowrap; }
+.ctrlem-db-auto-panel .ctrlem-db-auto-collapse { width: 28px; padding: 0; font-size: 18px; }
+.ctrlem-db-auto-tasks { min-height: 0; overflow-y: auto; padding: 0 10px; }
+.ctrlem-db-auto-tasks article { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; column-gap: 8px; padding: 10px 0; border-top: 1px solid var(--border-color); }
+.ctrlem-db-auto-task-content { min-width: 0; }
+.ctrlem-db-auto-task-content strong { display: block; font-size: .8rem; }
+.ctrlem-db-auto-task-content :is(strong, p:first-of-type) { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ctrlem-db-auto-task-content p { margin: 3px 0 0; color: var(--text-secondary); font-size: .75rem; overflow-wrap: anywhere; }
+.ctrlem-db-auto-task-actions { display: flex; flex-direction: column; gap: 4px; }
+.ctrlem-db-auto-tasks [data-status='paused'] .ctrlem-db-auto-task-content p:last-child { color: var(--warning); }
+.ctrlem-db-auto-notice { padding: 0 10px 10px; overflow-y: auto; }
+.ctrlem-db-auto-notice p { margin: 0 0 6px; }

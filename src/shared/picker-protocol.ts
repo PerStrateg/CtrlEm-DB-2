@@ -13,6 +13,11 @@ export interface PickerContextSource {
   context(command: CommandKey): PickerContext;
   subscribeContext(listener: () => void): () => void;
 }
+export interface PickerItemChoice { command: CommandKey; categoryId: string; itemId: string }
+export interface AutoPickerSource extends PickerContextSource {
+  subscribeItemChoice(listener: (choice: PickerItemChoice) => void): () => void;
+  showAutoSelections(selections: PickerItemChoice[]): void;
+}
 
 export const selectionSchema = z.object({
   categoryId: z.union([z.string().uuid(), z.literal('default')]).optional(),

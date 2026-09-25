@@ -13,7 +13,7 @@ export class LibraryLauncher {
 
   constructor(document: Document, regionId: string, onToggle: () => void) {
     this.element = document.createElement('div');
-    this.element.className = 'ctrlem-db-launcher';
+    this.element.className = 'ctrlem-db-launcher ctrlem-db-ui';
 
     this.button = document.createElement('button');
     this.button.type = 'button';

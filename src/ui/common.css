@@ -1,0 +1,24 @@
+/* Shared CtrlEm controls. Site variables are inherited; standalone settings supplies its theme. */
+.ctrlem-db-ui { color: var(--text-primary); font-size: .85rem; }
+.ctrlem-db-ui [hidden], .ctrlem-db-ui[hidden] { display: none !important; }
+.ctrlem-db-ui :where(button:not([data-send]), select) {
+  box-sizing: border-box; min-height: 32px; max-width: 100%; padding: 5px 8px;
+  border: 1px solid var(--border-color); border-radius: var(--border-radius);
+  background: var(--bg-tertiary); color: var(--text-primary); font: inherit;
+}
+.ctrlem-db-ui :where(button:not([data-send])) { cursor: pointer; overflow-wrap: anywhere; }
+.ctrlem-db-ui :where(button:not([data-send])):enabled:hover { border-color: var(--accent-primary); }
+.ctrlem-db-ui :where(button, input, select, textarea):disabled { opacity: .5; cursor: not-allowed; }
+.ctrlem-db-ui :where(input:not([type='checkbox']), textarea) {
+  box-sizing: border-box; min-width: 0; padding: 8px; border: 1px solid var(--border-color);
+  border-radius: var(--border-radius); background: var(--bg-primary); color: var(--text-primary); font: inherit;
+}
+.ctrlem-db-ui :where(input[type='checkbox']) { accent-color: var(--accent-primary); }
+.ctrlem-db-ui :is(button[aria-pressed='true'], button[aria-selected='true']) {
+  border-color: var(--accent-primary); box-shadow: 0 0 0 1px var(--accent-primary);
+}
+.ctrlem-db-ui :where(button, select, input, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent-primary); outline-offset: 3px;
+}
+.ctrlem-db-ui :where([role='status']) { font-size: .8rem; overflow-wrap: anywhere; }
+.ctrlem-db-ui :where([role='status']):empty { display: none; }

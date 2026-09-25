@@ -13,7 +13,7 @@ export class LibraryShell {
   constructor(document: Document) {
     this.element = document.createElement('section');
     this.element.id = libraryRegionId;
-    this.element.className = 'ctrlem-db-library';
+    this.element.className = 'ctrlem-db-library ctrlem-db-ui';
     this.element.hidden = true;
     this.element.setAttribute('aria-labelledby', `${libraryRegionId}-title`);
 

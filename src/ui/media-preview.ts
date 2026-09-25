@@ -24,7 +24,7 @@ export class MediaPreview {
     initiator.setAttribute('aria-expanded', 'true');
     initiator.addEventListener('keydown', this.escape);
     const region = this.document.createElement('section');
-    region.className = 'ctrlem-db-preview'; region.setAttribute('aria-label', 'Media preview');
+    region.className = 'ctrlem-db-preview ctrlem-db-ui'; region.setAttribute('aria-label', 'Media preview');
     const title = this.document.createElement('p'); title.textContent = item.label || item.value;
     const status = this.document.createElement('p'); status.setAttribute('role', 'status');
     const url = this.document.createElement('p'); url.textContent = item.value; url.hidden = true;

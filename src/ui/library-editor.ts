@@ -40,7 +40,7 @@ export class LibraryEditorView {
 
   constructor(document: Document, private readonly actions: EditorActions) {
     this.element = document.createElement('div');
-    this.element.className = 'ctrlem-db-editor';
+    this.element.className = 'ctrlem-db-editor ctrlem-db-ui';
     // Static markup only. User names, text and messages are assigned via textContent/value.
     this.element.innerHTML = `
       <div class="ctrlem-db-load-status" role="status"></div>
@@ -216,6 +216,7 @@ export class LibraryEditorView {
       const [select, up, down] = Array.from(row.querySelectorAll('button')) as [HTMLButtonElement, HTMLButtonElement, HTMLButtonElement];
       const label = `${category.name} (${category.count})${category.deleted ? ' — deleted' : ''}`;
       if (select.textContent !== label) select.textContent = label;
+      select.title = label;
       select.setAttribute('aria-pressed', String(category.id === state.draft?.id));
       up.setAttribute('aria-label', `Move ${category.name} up`); down.setAttribute('aria-label', `Move ${category.name} down`);
       up.disabled = index === 0 || Boolean(category.deleted) || state.busy;

@@ -35,7 +35,7 @@ export class ContentPickerView {
 
   constructor(private readonly document: Document, label: string, actions: PickerActions) {
     this.element = document.createElement('section');
-    this.element.className = 'ctrlem-db-picker';
+    this.element.className = 'ctrlem-db-picker ctrlem-db-ui';
     this.element.setAttribute('aria-label', `${label} library`);
     this.element.innerHTML = `
       <div class="ctrlem-db-picker-tools">
@@ -82,6 +82,7 @@ export class ContentPickerView {
       if (this.categories.children[index] !== option) this.categories.insertBefore(option, this.categories.children[index] ?? null);
     });
     this.categories.value = state.selection.categoryId ?? '';
+    this.categories.title = this.categories.selectedOptions[0]?.textContent ?? 'Category';
     this.categories.disabled = state.loading || state.loadError || !state.categories.length;
     this.create.disabled = state.loading || state.loadError;
     this.edit.disabled = this.create.disabled || !state.selection.categoryId || state.selection.categoryId === 'default';

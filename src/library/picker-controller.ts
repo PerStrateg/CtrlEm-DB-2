@@ -4,7 +4,7 @@ import { emptyLibrary } from '../model/library';
 import type { ContentType, Item, Library } from '../model/library';
 import type { LibraryClient } from '../shared/library-protocol';
 import type { PickerClient, PickerSelection, PickerSelections } from '../shared/picker-protocol';
-import type { PickerContext, PickerContextSource } from '../shared/picker-protocol';
+import type { PickerContext, AutoPickerSource, PickerItemChoice } from '../shared/picker-protocol';
 import { CommandFields } from '../site/command-fields';
 import type { CommandField, SiteGallery } from '../site/command-fields';
 import { ContentPickerView } from '../ui/content-picker';
@@ -19,7 +19,9 @@ interface PickerState {
 const emptyGallery = (): SiteGallery => ({ available: false, pending: false, failed: false, items: [] });
 type OpenEditor = (type: ContentType, id: string | undefined, create: boolean, initiator: HTMLElement) => void;
 
-export class PickerController implements PickerContextSource {
+export class PickerController implements AutoPickerSource {
+  private readonly itemListeners = new Set<(choice: PickerItemChoice) => void>();
+  private readonly autoSelections = new Map<CommandKey, Map<string, string>>();
   private readonly contextListeners = new Set<() => void>();
   private readonly contextSignatures = new Map<CommandKey, string>();
   private library: Library = emptyLibrary();
@@ -37,12 +39,31 @@ export class PickerController implements PickerContextSource {
 
   context(command: CommandKey): PickerContext {
     const state = this.states.get(command);
-    return { category: state ? this.category(state) : undefined, selection: { ...state?.selection },
+    return { category: state ? this.category(state) : undefined, selection: state ? this.displayedSelection(state) : {},
       loading: this.loading, loadError: this.loadError };
   }
   subscribeContext(listener: () => void): () => void {
     this.contextListeners.add(listener);
     return () => this.contextListeners.delete(listener);
+  }
+  subscribeItemChoice(listener: (choice: PickerItemChoice) => void): () => void {
+    this.itemListeners.add(listener);
+    return () => this.itemListeners.delete(listener);
+  }
+  showAutoSelections(selections: PickerItemChoice[]): void {
+    // Retain the last shown item after Stop, including while browsing another category.
+    for (const { command, categoryId, itemId } of selections) {
+      let categories = this.autoSelections.get(command);
+      if (!categories) { categories = new Map(); this.autoSelections.set(command, categories); }
+      if (categories.get(categoryId) === itemId) continue;
+      categories.set(categoryId, itemId);
+      const state = this.states.get(command);
+      if (state?.selection.categoryId === categoryId) this.render(state);
+    }
+  }
+  private displayedSelection(state: PickerState): PickerSelection {
+    const itemId = this.autoSelections.get(state.field.key)?.get(state.selection.categoryId ?? '');
+    return { ...state.selection, ...(itemId ? { itemId: this.items(state).some(item => item.id === itemId) ? itemId : undefined } : {}) };
   }
 
   start(): void {
@@ -144,7 +165,7 @@ export class PickerController implements PickerContextSource {
       if (!awaitingGallery && !this.items(state).some(item => item.id === state.selection.itemId)) delete state.selection.itemId;
       this.selections[state.field.key] = state.selection;
     }
-    state.view.render({ categories, items: this.loading || this.loadError ? [] : this.items(state), selection: state.selection,
+    state.view.render({ categories, items: this.loading || this.loadError ? [] : this.items(state), selection: this.displayedSelection(state),
       loading: this.loading, loadError: this.loadError,
       error: [state.selectionError ? 'Couldn’t save selection. Retry.' : '', state.previewError?.message].filter(Boolean).join(' ') || undefined,
       image: type === 'image', previews: this.category(state)?.previewsEnabled ?? true, previewBusy: state.previewBusy,
@@ -176,7 +197,9 @@ export class PickerController implements PickerContextSource {
     this.page.fill(state.field, item, state.selection.categoryId === 'default');
     state.defaultValue = state.selection.categoryId === 'default' ? item.value : undefined;
     state.selection = { ...state.selection, itemId: id };
+    this.autoSelections.get(key)?.delete(state.selection.categoryId!);
     this.render(state); this.persistSelection(state);
+    for (const listener of this.itemListeners) listener({ command: key, categoryId: state.selection.categoryId!, itemId: id });
   }
   private persistSelection(state: PickerState): void {
     const sequence = ++state.sequence;

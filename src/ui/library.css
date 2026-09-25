@@ -6,41 +6,19 @@
   grid-column: 2;
   grid-row: 1 / span 2;
   align-self: start;
-  box-sizing: border-box;
   height: 32px;
   min-width: 44px;
   margin: 0;
   padding: 0 10px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-  font: inherit;
   font-size: 0.85rem;
   font-weight: 600;
   line-height: 1;
-  cursor: pointer;
-}
-
-.ctrlem-db-button:hover:not(:disabled) {
-  border-color: var(--accent-primary);
 }
 
 .ctrlem-db-button[aria-expanded='true'] {
   border-color: var(--accent-primary);
   background: var(--accent-primary);
-  box-shadow: inset 0 -2px 0 currentColor;
-}
-
-.ctrlem-db-button:focus-visible,
-.ctrlem-db-library h2:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 3px;
-}
-
-.ctrlem-db-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  box-shadow: 0 0 0 1px var(--accent-primary);
 }
 
 .ctrlem-db-availability {
@@ -86,9 +64,6 @@
   padding: 1rem 1.25rem;
 }
 
-.ctrlem-db-library [hidden] { display: none !important; }
 .ctrlem-db-library nav { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 20px; }
-.ctrlem-db-library nav button { font: inherit; color: inherit; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; padding: 6px 12px; cursor: pointer; }
-.ctrlem-db-library nav button[aria-pressed='true'] { text-decoration: underline; font-weight: 700; }
-.ctrlem-db-library nav button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.ctrlem-db-library nav button { padding: 6px 12px; }
 .ctrlem-db-settings iframe { display: block; width: 100%; height: 560px; border: 0; }
