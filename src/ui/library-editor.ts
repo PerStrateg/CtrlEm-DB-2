@@ -159,6 +159,12 @@ export class LibraryEditorView {
   }
 
   private get<T extends HTMLElement = HTMLElement>(selector: string): T { return this.element.querySelector<T>(selector)!; }
+  focusEditor(create: boolean): void {
+    if (create) {
+      this.get('.ctrlem-db-create-form').hidden = false;
+      this.get<HTMLInputElement>('.ctrlem-db-create-form input').focus();
+    } else this.text.focus();
+  }
   capturePosition(): void {
     if (this.selectedId) this.actions.position(this.text.selectionStart, this.text.selectionEnd, this.text.scrollTop);
   }

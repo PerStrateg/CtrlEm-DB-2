@@ -1,9 +1,11 @@
 import { authorizedTab, LibraryService } from './library-service';
 import { EditorSessionRepository, LibraryReadError, LibraryRepository } from '../storage/library-store';
 import type { ChangeResult } from '../model/library';
+import { SelectionRepository } from '../storage/selection-store';
 
 const service = new LibraryService(
   new LibraryRepository(chrome.storage.local), new EditorSessionRepository(chrome.storage.session),
+  new SelectionRepository(chrome.storage.local),
 );
 
 // Register listeners synchronously for service-worker/event-page wakeups.
@@ -15,7 +17,8 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
   }
   void (async () => {
     try {
-      const value = await service.handle(tabId, message);
+      const receiver = new URL(sender.url!).pathname.split('/')[2]!;
+      const value = await service.handle(tabId, message, receiver);
       respond({ ok: true, value });
       if ((message as { type: string }).type === 'library:change') {
         const result = value as ChangeResult;

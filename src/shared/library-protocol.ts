@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { pickerRequests } from './picker-protocol';
 import { contentTypes } from '../model/library';
 import type { Library, LibraryChange, ChangeResult } from '../model/library';
 
@@ -37,6 +38,7 @@ const changeSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('move'), id, baseRevision: revision, beforeId: id.nullable() }).strict(),
 ]);
 export const requestSchema = z.discriminatedUnion('type', [
+  ...pickerRequests,
   z.object({ type: z.literal('library:load') }).strict(),
   z.object({ type: z.literal('library:change'), change: changeSchema }).strict(),
   z.object({ type: z.literal('library:session'), session: sessionSchema }).strict(),

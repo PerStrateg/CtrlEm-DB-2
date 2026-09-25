@@ -27,6 +27,7 @@ export class EditorController {
   private sessionSequence = 0;
   private unsubscribe?: () => void;
   private disposed = false;
+  private pendingOpen?: { type: ContentType; id?: string; create: boolean };
 
   constructor(container: HTMLElement, private readonly client: LibraryClient, private readonly onDirty: (dirty: boolean) => void) {
     this.view = new LibraryEditorView(container.ownerDocument, {
@@ -67,6 +68,11 @@ export class EditorController {
       }
       this.ensureSelected();
       this.loading = false; this.render();
+      if (this.pendingOpen) {
+        const request = this.pendingOpen;
+        this.pendingOpen = undefined;
+        this.openCategory(request.type, request.id, request.create);
+      }
       // Resume only unconfirmed text writes. Name edits still commit on Enter/blur.
       for (const state of this.drafts.values()) if (state.data.dirtyText && !state.conflict) this.schedule(state);
     } catch (error) {
@@ -147,6 +153,14 @@ export class EditorController {
 
   private selectType(type: ContentType): void {
     this.flushActive(); this.session.activeType = type; this.ensureSelected(); this.persistSession(); this.render();
+  }
+  openCategory(type: ContentType, id?: string, create = false): void {
+    if (this.loading || this.error) { this.pendingOpen = { type, id, create }; return; }
+    this.flushActive();
+    this.session.activeType = type;
+    if (id) this.session.selected[type] = id;
+    this.ensureSelected(); this.persistSession(); this.render();
+    this.view.focusEditor(create);
   }
   private selectCategory(id: string): void {
     this.flushActive(); this.session.selected[this.session.activeType] = id; this.ensureSelected(); this.persistSession(); this.render();

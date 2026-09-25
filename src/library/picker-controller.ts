@@ -1,0 +1,176 @@
+import { commands } from '../model/commands';
+import type { CommandKey } from '../model/commands';
+import { emptyLibrary } from '../model/library';
+import type { ContentType, Item, Library } from '../model/library';
+import type { LibraryClient } from '../shared/library-protocol';
+import type { PickerClient, PickerSelection, PickerSelections } from '../shared/picker-protocol';
+import { CommandFields } from '../site/command-fields';
+import type { CommandField, SiteGallery } from '../site/command-fields';
+import { ContentPickerView } from '../ui/content-picker';
+
+interface PickerState {
+  field: CommandField; view: ContentPickerView; gallery: SiteGallery; gallerySignature: string;
+  selection: PickerSelection; sequence: number; selectionError: boolean; previewBusy: boolean;
+  previewError?: { id: string; enabled: boolean; message: string };
+}
+const emptyGallery = (): SiteGallery => ({ available: false, pending: false, failed: false, items: [] });
+type OpenEditor = (type: ContentType, id: string | undefined, create: boolean, initiator: HTMLElement) => void;
+
+export class PickerController {
+  private library: Library = emptyLibrary();
+  private selections: PickerSelections = {};
+  private readonly states = new Map<CommandKey, PickerState>();
+  private loading = true;
+  private loadError = false;
+  private disposed = false;
+  private stopObserving?: () => void;
+  private unsubscribe?: () => void;
+
+  constructor(private readonly page: CommandFields, private readonly client: LibraryClient & PickerClient,
+    private readonly openEditor: OpenEditor) {}
+
+  start(): void {
+    this.unsubscribe = this.client.subscribe(library => { this.accept(library); this.renderAll(); });
+    this.stopObserving = this.page.observe(() => this.reconcile());
+    this.reconcile(); void this.load();
+  }
+
+  private async load(): Promise<void> {
+    this.loading = true; this.loadError = false; this.renderAll();
+    try {
+      const loaded = await this.client.loadPicker();
+      if (this.disposed) return;
+      this.accept(loaded.library); this.selections = loaded.selections;
+      for (const [key, state] of this.states) state.selection = { ...this.selections[key] };
+    } catch { this.loadError = true; }
+    finally { this.loading = false; this.renderAll(); }
+  }
+
+  private accept(library: Library): void {
+    if (library.revision >= this.library.revision) this.library = library;
+  }
+
+  private reconcile(): void {
+    if (this.disposed) return;
+    const fields = this.page.find();
+    for (const field of fields) {
+      const gallery = commands[field.key].type === 'image' ? this.page.gallery(field.key) : emptyGallery();
+      const signature = JSON.stringify(gallery);
+      let state = this.states.get(field.key);
+      if (!state) {
+        const view = new ContentPickerView(this.page.document, commands[field.key].label, {
+          category: id => this.selectCategory(field.key, id),
+          select: id => this.selectItem(field.key, id),
+          edit: (create, initiator) => {
+            const current = this.states.get(field.key)!;
+            this.openEditor(commands[field.key].type, create ? undefined : current.selection.categoryId, create, initiator);
+          },
+          previews: enabled => { void this.setPreviews(field.key, enabled); },
+          retry: () => {
+            if (this.loadError) void this.load();
+            else {
+              const current = this.states.get(field.key)!;
+              if (current.selectionError) this.persistSelection(current);
+              if (current.previewError) void this.setPreviews(field.key, current.previewError.enabled, current.previewError.id);
+            }
+          },
+        });
+        state = { field, view, selection: { ...this.selections[field.key] }, gallery, gallerySignature: signature,
+          sequence: 0, selectionError: false, previewBusy: false };
+        this.states.set(field.key, state);
+        this.render(state);
+      }
+      state.field = field;
+      if (field.input.nextElementSibling !== state.view.element) field.input.after(state.view.element);
+      if (signature !== state.gallerySignature) {
+        state.gallerySignature = signature; state.gallery = gallery; this.render(state);
+      }
+    }
+    // Keep the view and scroll when a native panel temporarily disappears.
+    for (const [key, state] of this.states) if (!fields.some(field => field.key === key)) state.view.element.remove();
+  }
+
+  private category(state: PickerState) {
+    return this.library.categories.find(category => category.id === state.selection.categoryId && category.type === commands[state.field.key].type);
+  }
+  private items(state: PickerState): Item[] {
+    return state.selection.categoryId === 'default' ? state.gallery.items : this.category(state)?.items ?? [];
+  }
+
+  private renderAll(): void {
+    if (!this.disposed) for (const state of this.states.values()) this.render(state);
+  }
+  private render(state: PickerState): void {
+    const type = commands[state.field.key].type;
+    const categories = this.library.categories.filter(category => category.type === type)
+      .map(category => ({ id: category.id, name: category.name, count: category.items.length }));
+    if (state.gallery.available) categories.unshift({ id: 'default', name: 'Default', count: state.gallery.items.length });
+    const previousSelection = JSON.stringify(state.selection);
+    const hadSelection = Boolean(state.selection.categoryId);
+    if (!this.loading && !this.loadError) {
+      if (!categories.some(category => category.id === state.selection.categoryId)) {
+        state.selection = categories[0] ? { categoryId: categories[0].id } : {};
+      }
+      const awaitingGallery = state.selection.categoryId === 'default' && (state.gallery.pending || state.gallery.failed);
+      if (!awaitingGallery && !this.items(state).some(item => item.id === state.selection.itemId)) delete state.selection.itemId;
+      this.selections[state.field.key] = state.selection;
+    }
+    state.view.render({ categories, items: this.loading || this.loadError ? [] : this.items(state), selection: state.selection,
+      loading: this.loading, loadError: this.loadError,
+      error: [state.selectionError ? 'Couldn’t save selection. Retry.' : '', state.previewError?.message].filter(Boolean).join(' ') || undefined,
+      image: type === 'image', previews: this.category(state)?.previewsEnabled ?? true, previewBusy: state.previewBusy,
+      emptyMessage: state.selection.categoryId === 'default'
+        ? state.gallery.failed ? 'Couldn’t load site images. Reopen the command to retry.'
+          : state.gallery.pending ? 'Open the command to load site images.' : 'No items yet. Create category to add images.'
+        : undefined });
+    if (hadSelection && previousSelection !== JSON.stringify(state.selection)) this.persistSelection(state);
+  }
+
+  private selectCategory(key: CommandKey, id: string): void {
+    const state = this.states.get(key)!;
+    state.selection = { categoryId: id };
+    this.render(state); this.persistSelection(state);
+  }
+  private selectItem(key: CommandKey, id: string): void {
+    const state = this.states.get(key)!;
+    const item = this.items(state).find(item => item.id === id); if (!item) return;
+    this.page.fill(state.field, item, state.selection.categoryId === 'default');
+    state.selection = { ...state.selection, itemId: id };
+    this.render(state); this.persistSelection(state);
+  }
+  private persistSelection(state: PickerState): void {
+    const sequence = ++state.sequence;
+    state.selectionError = false; this.render(state);
+    void this.client.select(state.field.key, { ...state.selection }).then(() => {
+      if (this.disposed || sequence !== state.sequence) return;
+      state.selectionError = false; this.render(state);
+    }, () => {
+      if (this.disposed || sequence !== state.sequence) return;
+      state.selectionError = true; this.render(state);
+    });
+  }
+
+  private async setPreviews(key: CommandKey, enabled: boolean, id?: string): Promise<void> {
+    const state = this.states.get(key)!;
+    const category = id ? this.library.categories.find(category => category.id === id) : this.category(state);
+    if (state.previewBusy) return;
+    state.previewError = undefined;
+    if (!category) { this.render(state); return; }
+    state.previewBusy = true; this.render(state);
+    try {
+      const result = await this.client.change({ kind: 'update', id: category.id, baseRevision: category.revision, previewsEnabled: enabled });
+      if (this.disposed) return;
+      this.accept(result.library);
+      if (result.status === 'conflict') state.previewError = { id: category.id, enabled, message: 'Changed in another tab. Review the category and retry.' };
+    } catch { state.previewError = { id: category.id, enabled, message: 'Couldn’t save previews. Retry.' }; }
+    finally {
+      state.previewBusy = false;
+      this.renderAll();
+    }
+  }
+
+  dispose(): void {
+    this.disposed = true; this.stopObserving?.(); this.unsubscribe?.();
+    for (const state of this.states.values()) state.view.element.remove();
+  }
+}
