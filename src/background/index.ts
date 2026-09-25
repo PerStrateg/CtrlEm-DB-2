@@ -7,13 +7,24 @@ import { authorizedSettings, credentialsRequest } from '../shared/credentials-pr
 import { WriteQueue } from '../storage/library-store';
 import { UploadSession } from './upload-service';
 import { uploadPortName, uploadReadyRequest } from '../shared/upload-protocol';
+import { diagnosticUploadFetch } from './upload-network';
+import { catboxAccess } from '../shared/provider-access';
 
 const credentials = new CredentialsRepository(chrome.storage.local, openCredentialKey);
 const credentialsQueue = new WriteQueue();
+const uploadRequest = diagnosticUploadFetch(chrome.webRequest, chrome.runtime.getURL(''), fetch, chrome.permissions);
+
+const accessChanged = () => {
+  void chrome.tabs.query({ url: 'https://ctrlem.com/u/*' }).then(tabs => Promise.all(tabs.map(tab =>
+    tab.id === undefined ? undefined : chrome.tabs.sendMessage(tab.id, { type: 'upload:settings-changed' }).catch(() => undefined)
+  ))).catch(() => console.warn('[CtrlEm DB] Could not notify provider access change.'));
+};
+chrome.permissions.onAdded.addListener(accessChanged);
+chrome.permissions.onRemoved.addListener(accessChanged);
 
 chrome.runtime.onConnect.addListener(port => {
   if (port.name !== uploadPortName || !port.sender || authorizedTab(port.sender, chrome.runtime.id) === undefined) { port.disconnect(); return; }
-  const upload = new UploadSession(credentials);
+  const upload = new UploadSession(credentials, uploadRequest, () => chrome.permissions.contains(catboxAccess));
   let connected = true;
   port.onMessage.addListener((input: unknown) => {
     void upload.handle(input).then(reply => { if (connected && reply) port.postMessage(reply); });
@@ -47,6 +58,16 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
   if (tabId === undefined) {
     respond({ ok: false, error: 'Request not allowed.' });
     return false;
+  }
+  if ((message as { type?: string })?.type === 'upload:catbox-access') {
+    void chrome.permissions.contains(catboxAccess).then(value => respond({ ok: true, value }),
+      () => respond({ ok: false, error: 'Couldn’t check Catbox access.' }));
+    return true;
+  }
+  if ((message as { type?: string })?.type === 'upload:open-access-settings') {
+    void chrome.runtime.openOptionsPage().then(() => respond({ ok: true }),
+      () => respond({ ok: false, error: 'Couldn’t open provider settings.' }));
+    return true;
   }
   if (uploadReadyRequest.safeParse(message).success) {
     void credentialsQueue.run(() => credentials.readField('imgbb')).then(

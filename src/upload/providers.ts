@@ -56,7 +56,10 @@ export async function uploadFile(provider: ProviderId, file: File, credentials: 
   }
   let response: Response;
   try { response = await request(anonymous ? imgbbAnonymous.endpoint : providers[provider].endpoint, { method: 'POST', body, signal, credentials: 'omit', redirect: 'error' }); }
-  catch { throw new UploadError({ stage: 'upload', code: 'network', anonymous }); }
+  catch (error) {
+    if (error instanceof UploadError) throw error;
+    throw new UploadError({ stage: 'upload', code: 'network', anonymous });
+  }
   if (!response.ok) throw new UploadError({ stage: 'upload', code: 'http', status: response.status, anonymous });
   try {
     let value: unknown;

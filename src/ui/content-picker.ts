@@ -92,6 +92,7 @@ export class ContentPickerView {
       : state.error ?? (!state.categories.length ? 'No categories yet.' : !state.items.length ? state.emptyMessage ?? 'No items yet.' : '');
     if (this.status.textContent !== status) this.status.textContent = status;
     this.retry.hidden = !(state.loadError || state.error);
+    this.items.classList.toggle('ctrlem-db-picker-media', Boolean(state.mediaType));
     this.items.classList.toggle('ctrlem-db-picker-grid', state.image);
     this.items.classList.toggle('ctrlem-db-picker-no-previews', state.image && !state.previews);
     const ids = new Set(state.items.map(item => item.id));
@@ -130,7 +131,7 @@ export class ContentPickerView {
         if (!preview) {
           preview = this.document.createElement('button'); preview.type = 'button';
           preview.className = 'ctrlem-db-picker-preview'; preview.dataset.previewId = item.id;
-          preview.textContent = 'Preview'; card.append(preview);
+          preview.textContent = 'Preview'; preview.setAttribute('aria-expanded', 'false'); card.append(preview);
         }
         preview.setAttribute('aria-label', `Preview ${label}`);
       } else preview?.remove();

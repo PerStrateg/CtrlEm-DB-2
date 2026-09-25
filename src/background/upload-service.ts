@@ -12,7 +12,8 @@ export class UploadSession {
   private uploading = false;
   private closed = false;
   private readonly abort = new AbortController();
-  constructor(private readonly credentials: CredentialsRepository, private readonly request: typeof fetch = fetch) {}
+  constructor(private readonly credentials: CredentialsRepository, private readonly request: typeof fetch = fetch,
+    private readonly catboxAllowed?: () => Promise<boolean>) {}
 
   async handle(input: unknown): Promise<UploadReply | undefined> {
     try {
@@ -36,6 +37,12 @@ export class UploadSession {
         const file = new File(this.parts, this.metadata.name, { type: this.metadata.mime });
         this.parts = [];
         const provider = this.metadata.provider;
+        if (provider === 'catbox' && this.catboxAllowed) {
+          let allowed: boolean;
+          try { allowed = await this.catboxAllowed(); }
+          catch { throw new UploadError({ stage: 'access', code: 'unavailable' }); }
+          if (!allowed) throw new UploadError({ stage: 'access', code: 'unavailable' });
+        }
         const credentials = { imgbb: '', catbox: '' };
         if (provider !== 'vidhosting') {
           try { credentials[provider] = await this.credentials.readField(provider); }

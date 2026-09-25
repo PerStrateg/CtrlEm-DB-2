@@ -83,7 +83,7 @@ export class PickerController implements PickerContextSource {
             const current = this.states.get(field.key)!;
             const item = this.items(current).find(item => item.id === id);
             const type = commands[field.key].type;
-            if (item && (type === 'sound' || type === 'video')) this.preview.open(type, item, current.view.element, initiator);
+            if (item && (type === 'sound' || type === 'video')) this.preview.toggle(type, item, current.view.element, initiator);
           },
           deleteDefault: id => {
             const current = this.states.get(field.key)!;

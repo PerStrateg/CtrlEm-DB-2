@@ -72,12 +72,14 @@ export class FileUploadView {
     });
   }
 
-  render(rows: UploadRow[], categoryId: string | undefined, loading: boolean, error: string, needsSetup: boolean): void {
+  render(rows: UploadRow[], categoryId: string | undefined, loading: boolean, error: string, needsSetup: boolean, needsAccess = false): void {
     this.zone.hidden = !categoryId;
     this.element.hidden = !categoryId && !rows.length;
     this.files.disabled = loading || Boolean(error);
     this.browse.disabled = this.files.disabled;
-    this.settings.hidden = !needsSetup;
+    this.settings.hidden = !needsSetup && !needsAccess;
+    const settingsLabel = needsAccess ? 'Enable Catbox access' : 'Set up provider';
+    if (this.settings.textContent !== settingsLabel) this.settings.textContent = settingsLabel;
     this.refresh.hidden = !error;
     const message = loading ? 'Loading provider settings…' : error;
     if (this.status.textContent !== message) this.status.textContent = message;
@@ -101,7 +103,7 @@ export class FileUploadView {
       if (result.value !== (row.url ?? '')) result.value = row.url ?? '';
       const retry = item.querySelector<HTMLButtonElement>('[data-action=retry]')!;
       retry.hidden = row.status !== 'Failed';
-      retry.disabled = row.provider === 'imgbb' && (loading || Boolean(error));
+      retry.disabled = loading || Boolean(error);
       item.querySelector<HTMLButtonElement>('[data-action=save]')!.hidden = row.status !== 'Save failed';
     }
   }

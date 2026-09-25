@@ -30,3 +30,7 @@
 .ctrlem-db-native-gallery-hidden { display: none !important; }
 .ctrlem-db-picker-status { margin: 5px 0; overflow-wrap: anywhere; }
 .ctrlem-db-picker-status:empty { display: none; }
+
+.ctrlem-db-picker-media .ctrlem-db-picker-select[aria-pressed=true] { border-color: var(--accent-primary); box-shadow: 0 0 0 1px var(--accent-primary); }
+.ctrlem-db-picker-media .ctrlem-db-picker-select[aria-pressed=true] > span::before { content: none; }
+.ctrlem-db-picker-media { padding: 2px; }

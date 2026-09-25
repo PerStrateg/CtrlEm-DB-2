@@ -5,12 +5,23 @@ import type { ProviderId, UploadType } from './providers';
 import type { Reply } from '../shared/library-protocol';
 
 export interface UploadClient {
+  catboxAllowed?(): Promise<boolean>;
+  openAccessSettings?(): Promise<void>;
   ready(): Promise<boolean>;
   subscribeSettings?(listener: () => void): () => void;
   upload(provider: ProviderId, media: UploadType, file: File, signal: AbortSignal): Promise<string>;
 }
 
 export class ExtensionUploadClient implements UploadClient {
+  async openAccessSettings(): Promise<void> {
+    const reply: Reply<void> = await chrome.runtime.sendMessage({ type: 'upload:open-access-settings' });
+    if (!reply.ok) throw new Error('Couldn’t open provider settings.');
+  }
+  async catboxAllowed(): Promise<boolean> {
+    const reply: Reply<boolean> = await chrome.runtime.sendMessage({ type: 'upload:catbox-access' });
+    if (!reply.ok) throw new Error('Couldn’t check Catbox access.');
+    return reply.value;
+  }
   subscribeSettings(listener: () => void): () => void {
     const onChange = (message: { type?: string }) => { if (message.type === 'upload:settings-changed') listener(); };
     chrome.runtime.onMessage.addListener(onChange);

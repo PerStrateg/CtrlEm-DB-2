@@ -18,6 +18,10 @@ export class UploadController {
   private readonly states = new Map<CommandKey, UploadState>();
   private readonly pending: { state: UploadState; row: UploadJob }[] = [];
   private hasImgBBKey = false;
+  private catboxAllowed = false;
+  private accessError = '';
+  private loadingAccess = true;
+  private accessRevision = 0;
   private settingsRevision = 0;
   private stopSettings?: () => void;
   private settingsError = '';
@@ -34,11 +38,20 @@ export class UploadController {
     private readonly settings: (initiator: HTMLElement, back: () => void) => void) {}
 
   start(): void {
-    this.stopSettings = this.client.subscribeSettings?.(() => { void this.refreshSettings(); });
+    this.stopSettings = this.client.subscribeSettings?.(() => { void this.refreshSettings(); void this.refreshAccess(); });
     this.unsubscribe = this.picker.subscribeContext(() => this.render());
     this.stopEdits = this.page.observeFieldEdits(key => { const state = this.states.get(key); if (state) state.fieldVersion++; });
     this.stopObserving = this.page.observe(() => this.reconcile());
-    this.reconcile(); void this.refreshSettings();
+    this.reconcile(); void this.refreshSettings(); void this.refreshAccess();
+  }
+  private async refreshAccess(): Promise<void> {
+    const revision = ++this.accessRevision;
+    this.loadingAccess = true; this.accessError = ''; this.render();
+    try {
+      const allowed = this.client.catboxAllowed ? await this.client.catboxAllowed() : true;
+      if (revision === this.accessRevision) this.catboxAllowed = allowed;
+    } catch { if (revision === this.accessRevision) this.accessError = 'Couldn’t check Catbox access. Retry loading.'; }
+    finally { if (revision === this.accessRevision) { this.loadingAccess = false; this.render(); } }
   }
   private async refreshSettings(): Promise<void> {
     const revision = ++this.settingsRevision;
@@ -65,8 +78,15 @@ export class UploadController {
             this.pending.push({ state: current, row }); this.render(); void this.drain();
           },
           save: id => { const current = this.states.get(field.key)!; void this.save(current, current.rows.find(row => row.id === id)!); },
-          settings: initiator => this.settings(initiator, () => { void this.refreshSettings(); }),
-          refresh: () => { void this.refreshSettings(); },
+          settings: initiator => {
+            if (type === 'sound') {
+              void this.client.openAccessSettings?.().catch(() => {
+                this.accessError = 'Couldn’t open provider settings. Retry loading, then enable access again.';
+                this.render();
+              });
+            } else this.settings(initiator, () => { void this.refreshSettings(); });
+          },
+          refresh: () => { void this.refreshSettings(); void this.refreshAccess(); },
         });
         state = { key: field.key as UploadCommand, field, view, rows: [], fieldVersion: 0 };
         this.states.set(field.key, state);
@@ -83,16 +103,20 @@ export class UploadController {
     for (const state of this.states.values()) {
       const context = this.picker.context(state.key);
       const image = state.view.type === 'image';
+      const sound = state.view.type === 'sound';
+      const needsAccess = sound && !this.loadingAccess && !this.accessError && !this.catboxAllowed;
       this.page.setCustomUpload(state.key, Boolean(context.category));
-      state.view.render(state.rows, context.category?.id, context.loading || (image && this.loadingSettings),
-        context.loadError ? 'Couldn’t load library. Use Retry in the picker.' : image ? this.settingsError : '',
-        image && !this.loadingSettings && !this.settingsError && !this.hasImgBBKey);
+      state.view.render(state.rows, context.category?.id, context.loading || (image && this.loadingSettings) || (sound && this.loadingAccess),
+        context.loadError ? 'Couldn’t load library. Use Retry in the picker.' : image ? this.settingsError : sound ?
+          this.accessError || (needsAccess ? 'Allow Catbox access to upload audio.' : '') : '',
+        image && !this.loadingSettings && !this.settingsError && !this.hasImgBBKey, needsAccess);
     }
   }
   private choose(state: UploadState, files: File[]): void {
     const context = this.picker.context(state.key);
     if (!context.category || context.loading || context.loadError) return;
     if (state.view.type === 'image' && (this.loadingSettings || this.settingsError)) return;
+    if (state.view.type === 'sound' && (this.loadingAccess || this.accessError || !this.catboxAllowed)) return;
     const provider = providerForType[state.view.type];
     for (const file of files) {
       const error = uploadFileError(provider, state.view.type, file);
@@ -115,6 +139,7 @@ export class UploadController {
       try {
         row.url = await this.client.upload(row.provider, state.view.type, row.file, this.abort.signal);
       } catch (error) {
+        if (error instanceof UploadError && error.failure.stage === 'access') void this.refreshAccess();
         row.status = 'Failed'; row.error = error instanceof UploadError ? error.message : 'Couldn’t upload. The provider may have received this file. Retry upload if needed.';
         this.render(); continue;
       }
