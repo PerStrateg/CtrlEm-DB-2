@@ -11,6 +11,7 @@ export interface PickerViewState {
 interface PickerActions {
   category(id: string): void;
   select(id: string): void;
+  deleteDefault(id: string): void;
   edit(create: boolean, initiator: HTMLElement): void;
   previews(enabled: boolean): void;
   retry(): void;
@@ -57,6 +58,8 @@ export class ContentPickerView {
     this.retry.addEventListener('click', actions.retry);
     this.previews.addEventListener('change', () => actions.previews(this.previews.checked));
     this.items.addEventListener('click', event => {
+      const remove = (event.target as Element).closest<HTMLButtonElement>('button[data-delete-id]');
+      if (remove) { actions.deleteDefault(remove.dataset.deleteId!); return; }
       const row = (event.target as Element).closest<HTMLButtonElement>('button[data-item-id]');
       if (row) actions.select(row.dataset.itemId!);
     });
@@ -86,18 +89,21 @@ export class ContentPickerView {
     this.retry.hidden = !(state.loadError || state.error);
     this.items.classList.toggle('ctrlem-db-picker-grid', state.image && state.previews);
     const ids = new Set(state.items.map(item => item.id));
-    for (const [id, row] of this.rows) if (!ids.has(id)) { row.remove(); this.rows.delete(id); }
+    for (const [id, row] of this.rows) if (!ids.has(id)) { row.parentElement!.remove(); this.rows.delete(id); }
     state.items.forEach((item, index) => {
       let row = this.rows.get(item.id);
       if (!row) {
         row = this.document.createElement('button'); row.type = 'button'; row.dataset.itemId = item.id;
+        row.className = 'ctrlem-db-picker-select';
+        const card = this.document.createElement('div'); card.className = 'ctrlem-db-picker-card'; card.append(row);
         const caption = this.document.createElement('span'); row.append(caption);
         this.rows.set(item.id, row);
       }
       const caption = row.querySelector('span')!;
       const label = item.label || item.value;
       if (caption.textContent !== label) caption.textContent = label;
-      row.title = item.value;
+      row.title = item.label ? `${item.label}\n${item.value}` : item.value;
+      row.setAttribute('aria-label', label);
       row.setAttribute('aria-pressed', String(state.selection.itemId === item.id));
       let img = row.querySelector('img');
       if (state.image && state.previews) {
@@ -112,7 +118,17 @@ export class ContentPickerView {
           img.hidden = false; row.querySelector('small')!.hidden = true; img.src = item.value;
         }
       } else { img?.remove(); row.querySelector('small')?.remove(); }
-      if (this.items.children[index] !== row) this.items.insertBefore(row, this.items.children[index] ?? null);
+      const card = row.parentElement!;
+      let remove = card.querySelector<HTMLButtonElement>('[data-delete-id]');
+      if (state.image && state.selection.categoryId === 'default') {
+        if (!remove) {
+          remove = this.document.createElement('button'); remove.type = 'button';
+          remove.className = 'ctrlem-db-picker-delete'; remove.dataset.deleteId = item.id;
+          remove.textContent = '×'; card.append(remove);
+        }
+        remove.title = `Delete ${label}`; remove.setAttribute('aria-label', `Delete ${label}`);
+      } else remove?.remove();
+      if (this.items.children[index] !== card) this.items.insertBefore(card, this.items.children[index] ?? null);
     });
     if (this.categoryId !== state.selection.categoryId) this.items.scrollTop = 0;
     this.categoryId = state.selection.categoryId;

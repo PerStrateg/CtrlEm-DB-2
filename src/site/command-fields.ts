@@ -7,7 +7,30 @@ export interface SiteGallery { available: boolean; pending: boolean; failed: boo
 
 /** The only picker component that knows native command and gallery markup. */
 export class CommandFields {
+  private readonly hiddenGalleries = new Set<HTMLElement>();
   constructor(readonly document: Document) {}
+
+  syncGalleryVisibility(fields: CommandField[]): void {
+    const galleries = new Set(fields.filter(field => commands[field.key].type === 'image')
+      .map(field => this.document.getElementById(`gallery-${field.key}`)).filter(element => element !== null));
+    for (const gallery of this.hiddenGalleries) if (!galleries.has(gallery)) {
+      gallery.classList.remove('ctrlem-db-native-gallery-hidden'); this.hiddenGalleries.delete(gallery);
+    }
+    for (const gallery of galleries) {
+      gallery.classList.add('ctrlem-db-native-gallery-hidden'); this.hiddenGalleries.add(gallery);
+    }
+  }
+
+  restoreGalleries(): void {
+    for (const gallery of this.hiddenGalleries) gallery.classList.remove('ctrlem-db-native-gallery-hidden');
+    this.hiddenGalleries.clear();
+  }
+
+  deleteDefault(key: CommandKey, id: string): void {
+    const wrapper = Array.from(this.document.querySelectorAll<HTMLElement>(`#gallery-${key} .gallery-thumb-wrapper`))
+      .find(element => element.dataset.uploadId === id);
+    wrapper?.querySelector<HTMLButtonElement>('.gallery-thumb-delete')?.click();
+  }
 
   find(): CommandField[] {
     return commandKeys.flatMap(key => {

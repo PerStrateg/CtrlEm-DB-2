@@ -12,10 +12,17 @@
 .ctrlem-db-picker button:disabled { opacity: .5; cursor: not-allowed; }
 .ctrlem-db-picker :is(button, select, input):focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
 .ctrlem-db-picker-items { display: grid; gap: 5px; max-height: 240px; overflow-y: auto; margin-top: 6px; }
-.ctrlem-db-picker-items button { display: flex; flex-direction: column; gap: 4px; text-align: left; min-width: 0; }
+.ctrlem-db-picker-card { position: relative; min-width: 0; }
+.ctrlem-db-picker-items .ctrlem-db-picker-select { display: flex; flex-direction: column; gap: 4px; text-align: left; min-width: 0; width: 100%; }
 .ctrlem-db-picker-items [aria-pressed=true] { border-color: var(--accent-primary); box-shadow: inset 3px 0 var(--accent-primary); }
 .ctrlem-db-picker-items [aria-pressed=true] > span::before { content: '✓ '; }
-.ctrlem-db-picker-grid { grid-template-columns: repeat(auto-fill, minmax(min(110px, 100%), 1fr)); }
-.ctrlem-db-picker-grid img { width: 100%; height: 90px; object-fit: contain; }
+.ctrlem-db-picker-grid { grid-template-columns: repeat(auto-fill, 64px); gap: 8px; padding: 3px; }
+.ctrlem-db-picker-grid .ctrlem-db-picker-select { box-sizing: border-box; width: 64px; height: 64px; padding: 0; border: 2px solid var(--border-color); border-radius: 6px; overflow: hidden; }
+.ctrlem-db-picker-grid img { width: 100%; height: 100%; object-fit: cover; flex-shrink: 0; }
+.ctrlem-db-picker-grid .ctrlem-db-picker-select > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.ctrlem-db-picker-grid small { font-size: 9px; overflow-wrap: anywhere; }
+.ctrlem-db-picker-grid [aria-pressed=true] { border-color: var(--accent-primary); box-shadow: 0 0 0 1px var(--accent-primary); }
+.ctrlem-db-picker .ctrlem-db-picker-delete { position: absolute; top: 2px; right: 2px; display: grid; place-items: center; width: 18px; height: 18px; min-height: 0; padding: 0; border: 0; border-radius: 50%; background: #c62828; color: #fff; font-size: 14px; line-height: 1; }
+.ctrlem-db-native-gallery-hidden { display: none !important; }
 .ctrlem-db-picker-status { margin: 5px 0; overflow-wrap: anywhere; }
 .ctrlem-db-picker-status:empty { display: none; }

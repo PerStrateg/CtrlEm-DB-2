@@ -53,6 +53,7 @@ export class PickerController {
   private reconcile(): void {
     if (this.disposed) return;
     const fields = this.page.find();
+    this.page.syncGalleryVisibility(fields);
     for (const field of fields) {
       const gallery = commands[field.key].type === 'image' ? this.page.gallery(field.key) : emptyGallery();
       const signature = JSON.stringify(gallery);
@@ -61,6 +62,10 @@ export class PickerController {
         const view = new ContentPickerView(this.page.document, commands[field.key].label, {
           category: id => this.selectCategory(field.key, id),
           select: id => this.selectItem(field.key, id),
+          deleteDefault: id => {
+            const current = this.states.get(field.key)!;
+            if (current.selection.categoryId === 'default') this.page.deleteDefault(field.key, id);
+          },
           edit: (create, initiator) => {
             const current = this.states.get(field.key)!;
             this.openEditor(commands[field.key].type, create ? undefined : current.selection.categoryId, create, initiator);
@@ -172,5 +177,6 @@ export class PickerController {
   dispose(): void {
     this.disposed = true; this.stopObserving?.(); this.unsubscribe?.();
     for (const state of this.states.values()) state.view.element.remove();
+    this.page.restoreGalleries();
   }
 }
