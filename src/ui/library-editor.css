@@ -11,6 +11,7 @@
   margin-top: 6px;
 }
 .ctrlem-db-editor textarea { resize: vertical; line-height: 1.5; min-height: 180px; }
+.ctrlem-db-editor textarea[wrap="off"] { white-space: pre; overflow-wrap: normal; overflow-x: auto; }
 .ctrlem-db-editor [aria-invalid='true'] { border-color: var(--danger); }
 .ctrlem-db-editor label { display: block; margin-bottom: 8px; }
 .ctrlem-db-category-list { list-style: none; padding: 0 0 24px; margin: 10px 0 0; }

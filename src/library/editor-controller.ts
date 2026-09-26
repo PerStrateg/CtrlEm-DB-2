@@ -28,6 +28,7 @@ export class EditorController {
   private unsubscribe?: () => void;
   private disposed = false;
   private transferLocked = false;
+  private readonly removingImages = new Set<string>();
   private pendingOpen?: { type: ContentType; id?: string; create: boolean };
 
   constructor(container: HTMLElement, private readonly client: LibraryClient, private readonly onDirty: (dirty: boolean) => void, private readonly onType: (type: ContentType) => void = () => {}) {
@@ -138,7 +139,7 @@ export class EditorController {
     this.view.render({ loading: this.loading, error: this.error, type: this.session.activeType, categories,
       draft: active?.data, status: active?.status ?? '', nameError: active?.nameError, invalidLines: active?.invalidLines ?? [],
       conflict: active?.conflict ?? false, canOverwrite: this.library.categories.some(item => item.id === active?.data.id),
-      sessionError: this.sessionError, busy: Boolean(active?.busy) });
+      sessionError: this.sessionError, busy: Boolean(active?.busy), removingImage: this.removingImages.has(active?.data.id ?? '') });
     this.onDirty([...this.drafts.values()].some(state => state.data.dirtyName || state.data.dirtyText));
   }
 
@@ -324,6 +325,39 @@ export class EditorController {
     if (this.active()?.data.id !== id) this.selectCategory(id);
     if (!this.drafts.has(id)) this.drafts.set(id, this.restore(this.fromCategory(category)));
     this.change(this.drafts.get(id)!, { kind: 'move', beforeId }, () => {});
+  }
+
+  async removeImage(categoryId: string, itemId: string): Promise<void> {
+    if (this.disposed || this.loading || this.error || this.transferLocked) throw new Error('Library is busy. Try again.');
+    if (this.removingImages.has(categoryId)) return;
+    const category = this.library.categories.find(item => item.id === categoryId && item.type === 'image');
+    if (!category) throw new Error('This category is no longer available.');
+    if (!this.drafts.has(categoryId)) this.drafts.set(categoryId, this.restore(this.fromCategory(category)));
+    const state = this.drafts.get(categoryId)!;
+    this.view.capturePosition();
+    this.removingImages.add(categoryId); this.render();
+    try {
+      clearTimeout(state.timer); this.rename(state); this.saveText(state);
+      await state.work;
+      if (state.conflict) throw new Error('This category changed. Resolve the conflict in DB first.');
+      if (state.nameError || state.invalidLines.length) throw new Error('Fix the highlighted fields in DB before deleting this image.');
+      if (state.data.dirtyName || state.data.dirtyText) throw new Error('Save your changes in DB before deleting this image.');
+      if (this.disposed || this.transferLocked || this.drafts.get(categoryId) !== state) throw new Error('Library changed. Try again.');
+      const current = this.library.categories.find(item => item.id === categoryId);
+      if (!current) throw new Error('This category is no longer available.');
+      if (!current.items.some(item => item.id === itemId)) return;
+      const text = formatItems(current.items.filter(item => item.id !== itemId));
+      const version = state.textVersion;
+      let saved = false;
+      this.change(state, { kind: 'update', text }, () => {
+        saved = true;
+        if (state.textVersion === version) { state.data.text = text; state.data.dirtyText = false; }
+      }, () => state.textVersion === version && !state.data.dirtyText && !state.data.dirtyName);
+      await state.work;
+      if (!saved) throw new Error(state.conflict ? 'This category changed. Resolve the conflict in DB first.' : 'Couldn’t delete image. Try again.');
+    } finally {
+      this.removingImages.delete(categoryId); this.render();
+    }
   }
 
   transferState() {

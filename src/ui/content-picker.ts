@@ -10,13 +10,14 @@ export interface PickerViewState {
   categories: PickerCategory[]; items: Item[]; selection: PickerSelection;
   loading: boolean; loadError: boolean; error?: string;
   image: boolean; previews: boolean; previewBusy: boolean;
+  canDeleteImages?: boolean; deleteBusy?: boolean; deleteError?: string;
   emptyMessage?: string;
   mediaType?: MediaType;
 }
 interface PickerActions {
   category(id: string): void;
   select(id: string): void;
-  deleteDefault(id: string): void;
+  deleteImage(id: string): void;
   edit(create: boolean, initiator: HTMLElement): void;
   previews(enabled: boolean): void;
   retry(): void;
@@ -50,6 +51,7 @@ export class ContentPickerView {
         <label class="ctrlem-db-picker-previews" title="Show previews"><input type="checkbox" aria-label="Show previews"></label>
       </div>
       <p class="ctrlem-db-picker-status" role="status"></p>
+      <p class="ctrlem-db-picker-delete-error" role="alert" hidden></p>
       <button type="button" data-action="retry" hidden>Retry</button>
       <div class="ctrlem-db-picker-items" role="group" aria-label="Entries"></div>`;
     this.info = createInfoButton(document, 'About this category', '');
@@ -71,13 +73,15 @@ export class ContentPickerView {
       const preview = (event.target as Element).closest<HTMLButtonElement>('button[data-preview-id]');
       if (preview) { actions.preview(preview.dataset.previewId!, preview); return; }
       const remove = (event.target as Element).closest<HTMLButtonElement>('button[data-delete-id]');
-      if (remove) { actions.deleteDefault(remove.dataset.deleteId!); return; }
+      if (remove) { actions.deleteImage(remove.dataset.deleteId!); return; }
       const row = (event.target as Element).closest<HTMLButtonElement>('button[data-item-id]');
       if (row) actions.select(row.dataset.itemId!);
     });
   }
 
   render(state: PickerViewState): void {
+    const deleteError = this.element.querySelector<HTMLElement>('.ctrlem-db-picker-delete-error')!;
+    deleteError.textContent = state.deleteError ?? ''; deleteError.hidden = !state.deleteError;
     const options = new Map(Array.from(this.categories.options, option => [option.value, option]));
     const categoryIds = new Set(state.categories.map(category => category.id));
     for (const option of options.values()) if (option.value && !categoryIds.has(option.value)) option.remove();
@@ -137,13 +141,13 @@ export class ContentPickerView {
         preview.setAttribute('aria-label', `Preview ${label}`);
       } else preview?.remove();
       let remove = card.querySelector<HTMLButtonElement>('[data-delete-id]');
-      if (state.image && state.selection.categoryId === 'default') {
+      if (state.image && state.canDeleteImages) {
         if (!remove) {
           remove = this.document.createElement('button'); remove.type = 'button';
           remove.className = 'ctrlem-db-picker-delete'; remove.dataset.deleteId = item.id;
           remove.textContent = '×'; card.append(remove);
         }
-        remove.title = `Delete ${label}`; remove.setAttribute('aria-label', `Delete ${label}`);
+        remove.setAttribute('aria-label', 'Delete image'); remove.disabled = Boolean(state.deleteBusy);
       } else remove?.remove();
       if (this.items.children[index] !== card) this.items.insertBefore(card, this.items.children[index] ?? null);
     });

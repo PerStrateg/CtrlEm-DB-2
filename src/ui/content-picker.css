@@ -17,3 +17,5 @@
 .ctrlem-db-picker .ctrlem-db-picker-delete { position: absolute; top: 2px; right: 2px; display: grid; place-items: center; width: 18px; height: 18px; min-height: 0; padding: 0; border: 0; border-radius: 50%; background: #c62828; color: #fff; font-size: 14px; line-height: 1; }
 .ctrlem-db-native-gallery-hidden { display: none !important; }
 .ctrlem-db-picker-status { margin: 8px 0; overflow-wrap: anywhere; }
+
+.ctrlem-db-picker-delete-error { margin: 8px 0; overflow-wrap: anywhere; color: #ef9a9a; }

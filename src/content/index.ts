@@ -50,7 +50,7 @@ const fields = new CommandFields(document);
 const pickers = new PickerController(fields, client, (type, id, create, initiator) => {
   shell.openFrom(initiator);
   editor.openCategory(type, id, create);
-});
+}, undefined, (categoryId, itemId) => editor.removeImage(categoryId, itemId), results);
 const capture = new CaptureController(fields, client, (key, value) => pickers.isDefaultValue(key, value));
 const uploads = new UploadController(fields, client, new ExtensionUploadClient(), pickers,
   (initiator, back) => shell.openSettings(initiator, back));

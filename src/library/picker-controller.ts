@@ -1,3 +1,4 @@
+import type { ResultsController } from '../ui/results-controller';
 import { commands } from '../model/commands';
 import type { CommandKey } from '../model/commands';
 import { emptyLibrary } from '../model/library';
@@ -31,12 +32,20 @@ export class PickerController implements AutoPickerSource {
   private loading = true;
   private loadError = false;
   private disposed = false;
+  private libraryOpen = false;
+  private stopResults?: () => void;
+  private readonly deleting = new Set<string>();
+  private readonly deleteErrors = new Map<string, string>();
   private stopObserving?: () => void;
   private unsubscribe?: () => void;
   private readonly preview: MediaPreview;
 
   constructor(private readonly page: CommandFields, private readonly client: LibraryClient & PickerClient,
-    private readonly openEditor: OpenEditor, private readonly imageLoader?: ImageLoader) { this.preview = new MediaPreview(page.document); }
+    private readonly openEditor: OpenEditor, private readonly imageLoader?: ImageLoader,
+    private readonly removeImage?: (categoryId: string, itemId: string) => Promise<void>, results?: ResultsController) {
+    this.preview = new MediaPreview(page.document);
+    this.stopResults = results?.subscribe(view => { this.libraryOpen = view === 'library'; this.renderAll(); });
+  }
 
   context(command: CommandKey): PickerContext {
     const state = this.states.get(command);
@@ -107,10 +116,7 @@ export class PickerController implements AutoPickerSource {
             const type = commands[field.key].type;
             if (item && (type === 'sound' || type === 'video')) this.preview.toggle(type, item, current.view.element, initiator);
           },
-          deleteDefault: id => {
-            const current = this.states.get(field.key)!;
-            if (current.selection.categoryId === 'default') this.page.deleteDefault(field.key, id);
-          },
+          deleteImage: id => { void this.deleteImage(field.key, id); },
           edit: (create, initiator) => {
             const current = this.states.get(field.key)!;
             this.openEditor(commands[field.key].type, create ? undefined : current.selection.categoryId, create, initiator);
@@ -171,6 +177,9 @@ export class PickerController implements AutoPickerSource {
     state.view.render({ categories, items: this.loading || this.loadError ? [] : this.items(state), selection: this.displayedSelection(state),
       loading: this.loading, loadError: this.loadError,
       error: state.previewError?.message,
+      canDeleteImages: this.libraryOpen && (state.selection.categoryId === 'default' || Boolean(this.removeImage)),
+      deleteBusy: this.deleting.has(state.selection.categoryId ?? ''),
+      deleteError: this.deleteErrors.get(state.selection.categoryId ?? ''),
       image: type === 'image', previews: this.category(state)?.previewsEnabled ?? true, previewBusy: state.previewBusy,
       mediaType: type === 'sound' || type === 'video' ? type : undefined,
       emptyMessage: state.selection.categoryId === 'default'
@@ -209,6 +218,18 @@ export class PickerController implements AutoPickerSource {
     void this.client.select(state.field.key, { ...state.selection }).catch(() => undefined);
   }
 
+  private async deleteImage(key: CommandKey, itemId: string): Promise<void> {
+    const state = this.states.get(key)!;
+    const categoryId = state.selection.categoryId;
+    if (!this.libraryOpen || commands[key].type !== 'image' || !categoryId || this.deleting.has(categoryId)) return;
+    if (categoryId === 'default') { this.page.deleteDefault(key, itemId); return; }
+    if (!this.removeImage) return;
+    this.deleting.add(categoryId); this.deleteErrors.delete(categoryId); this.renderAll();
+    try { await this.removeImage(categoryId, itemId); }
+    catch (error) { this.deleteErrors.set(categoryId, error instanceof Error ? error.message : 'Couldn’t delete image. Try again.'); }
+    finally { this.deleting.delete(categoryId); this.renderAll(); }
+  }
+
   private async setPreviews(key: CommandKey, enabled: boolean, id?: string): Promise<void> {
     const state = this.states.get(key)!;
     const category = id ? this.library.categories.find(category => category.id === id) : this.category(state);
@@ -230,7 +251,7 @@ export class PickerController implements AutoPickerSource {
 
   dispose(): void {
     this.preview.close(false);
-    this.disposed = true; this.stopObserving?.(); this.unsubscribe?.();
+    this.disposed = true; this.stopResults?.(); this.stopObserving?.(); this.unsubscribe?.();
     for (const state of this.states.values()) state.view.dispose();
     this.page.restoreGalleries();
   }

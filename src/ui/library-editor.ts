@@ -6,7 +6,7 @@ export interface CategoryRow { id: string; name: string; count: number; deleted?
 export interface EditorViewState {
   loading: boolean; error?: string; type: ContentType; categories: CategoryRow[];
   draft?: EditorDraft; status: string; nameError?: string; invalidLines: number[];
-  conflict: boolean; canOverwrite: boolean; sessionError: boolean; busy: boolean;
+  conflict: boolean; canOverwrite: boolean; sessionError: boolean; busy: boolean; removingImage?: boolean;
 }
 export interface EditorActions {
   retryLoad(): void;
@@ -206,12 +206,17 @@ export class LibraryEditorView {
       if (state.draft) this.name.focus();
       else this.get<HTMLButtonElement>('.ctrlem-db-create').focus();
     }
+    this.get('.ctrlem-db-category-editor').inert = Boolean(state.removingImage);
+    const wrap = state.type === 'text' ? 'soft' : 'off';
+    if (this.text.wrap !== wrap) this.text.wrap = wrap;
     if (!state.draft) return;
     if (this.name.value !== state.draft.name) this.name.value = state.draft.name;
     if (switched || this.text.value !== state.draft.text) {
+      const scrollLeft = switched ? 0 : this.text.scrollLeft;
       this.text.value = state.draft.text;
       this.text.setSelectionRange(state.draft.selectionStart, state.draft.selectionEnd);
       this.text.scrollTop = state.draft.scrollTop;
+      this.text.scrollLeft = scrollLeft;
     }
     if (switched && creating) this.text.focus();
     this.get('.ctrlem-db-previews').hidden = state.type !== 'image';
