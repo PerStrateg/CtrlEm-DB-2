@@ -7,7 +7,7 @@ export interface UploadRow {
   url?: string; error?: string; canRetry?: boolean;
 }
 interface UploadActions {
-  files(files: File[]): void; retry(id: string): void; save(id: string): void;
+  files(files: File[]): void; retry(id: string): void;
   settings(initiator: HTMLElement): void; refresh(): void;
   clearCompleted(): void;
   remove(id: string): void;
@@ -75,7 +75,6 @@ export class FileUploadView {
       const button = (event.target as Element).closest<HTMLButtonElement>('button[data-id]');
       if (!button) return;
       if (button.dataset.action === 'retry') actions.retry(button.dataset.id!);
-      else if (button.dataset.action === 'save') actions.save(button.dataset.id!);
       else if (button.dataset.action === 'remove') {
         const item = button.closest('li')!;
         const confirm = item.querySelector<HTMLElement>('[data-remove-confirm]')!;
@@ -118,26 +117,26 @@ export class FileUploadView {
         const result = this.document.createElement('input'); result.className = 'form-input'; result.readOnly = true; result.setAttribute('aria-label', 'Uploaded URL');
         result.onclick = () => result.select();
         const retry = this.document.createElement('button'); retry.type = 'button'; retry.className = 'btn btn-secondary'; retry.dataset.action = 'retry'; retry.dataset.id = row.id; retry.textContent = 'Retry upload';
-        const save = this.document.createElement('button'); save.type = 'button'; save.className = 'btn btn-secondary'; save.dataset.action = 'save'; save.dataset.id = row.id; save.textContent = 'Retry save';
         const remove = this.document.createElement('button'); remove.type = 'button'; remove.className = 'btn btn-secondary';
         remove.dataset.action = 'remove'; remove.dataset.id = row.id;
         const confirm = this.document.createElement('div'); confirm.dataset.removeConfirm = ''; confirm.hidden = true;
-        const warning = this.document.createElement('p'); warning.textContent = 'This link is not saved. Copy the URL above before removing this result. The uploaded file will remain at the provider.';
+        const warning = this.document.createElement('p'); warning.textContent = 'Copy the URL above before removing this result. The uploaded file will remain at the provider.';
         confirm.append(warning);
         for (const [action, label] of [['confirm-remove', 'Remove result'], ['keep', 'Keep result']]) {
           const button = this.document.createElement('button'); button.type = 'button'; button.dataset.action = action;
           button.dataset.id = row.id; button.textContent = label!; confirm.append(button);
         }
-        item.append(caption, result, retry, save, remove, confirm); this.rows.append(item); this.rowElements.set(row.id, item);
+        item.append(caption, result, retry, remove, confirm); this.rows.append(item); this.rowElements.set(row.id, item);
       }
-      const text = `${row.fileName} · ${row.categoryName} · ${row.status}${row.error ? ` · ${row.error}` : ''}`;
+      const status = row.status === 'Saving' ? '' : row.status === 'Saved' || row.status === 'Save failed' ? 'Uploaded' : row.status;
+      const uploadError = row.status === 'Failed' ? row.error : undefined;
+      const text = [row.fileName, row.categoryName, status, uploadError].filter(Boolean).join(' · ');
       if (item.querySelector('p')!.textContent !== text) item.querySelector('p')!.textContent = text;
       const result = item.querySelector('input')!; result.hidden = !row.url || row.status === 'Saved';
       if (result.value !== (row.url ?? '')) result.value = row.url ?? '';
       const retry = item.querySelector<HTMLButtonElement>('[data-action=retry]')!;
       retry.hidden = row.status !== 'Failed' || row.canRetry === false;
       retry.disabled = loading || Boolean(error);
-      item.querySelector<HTMLButtonElement>('[data-action=save]')!.hidden = row.status !== 'Save failed';
       const remove = item.querySelector<HTMLButtonElement>('[data-action=remove]')!;
       remove.hidden = !['Waiting', 'Failed', 'Save failed'].includes(row.status);
       const removeLabel = row.status === 'Waiting' ? 'Cancel' : 'Remove';

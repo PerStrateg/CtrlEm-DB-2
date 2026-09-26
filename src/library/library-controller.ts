@@ -2,6 +2,7 @@ import { CtrlEmPage } from '../site/ctrlem-page';
 import type { ResultsMount } from '../site/ctrlem-page';
 import { LibraryLauncher } from '../ui/library-launcher';
 import { LibraryShell, libraryRegionId } from '../ui/library-shell';
+import type { ResultsController } from '../ui/results-controller';
 
 /** Coordinates view state; it neither sends commands nor reads/writes library data. */
 export class LibraryController {
@@ -16,17 +17,23 @@ export class LibraryController {
   private hasMounted = false;
   private open = false;
   private returnFocus?: HTMLElement;
+  private stopResults?: () => void;
 
-  constructor(private readonly page: CtrlEmPage, private readonly onClose: () => void = () => {}) {
+  constructor(private readonly page: CtrlEmPage, private readonly onClose: () => void = () => {}, private readonly results?: ResultsController) {
     this.shell = new LibraryShell(page.document);
     this.launcher = new LibraryLauncher(page.document, libraryRegionId, () => this.toggle());
+    this.stopResults = results?.subscribe(view => {
+      if (view !== 'library' && this.open) {
+        this.open = false; this.onClose(); this.reconcile();
+      }
+    });
   }
 
   get content(): HTMLElement { return this.shell.content; }
   get database(): HTMLElement { return this.shell.database; }
-  setUnsaved(unsaved: boolean): void { this.launcher.setUnsaved(unsaved); }
 
   openFrom(initiator: HTMLElement): void {
+    this.results?.select('library');
     this.shell.showCategories();
     this.returnFocus = initiator;
     this.open = true;
@@ -35,11 +42,13 @@ export class LibraryController {
   }
 
   openSettings(initiator: HTMLElement, back: () => void): void {
+    this.results?.select('library');
     this.returnFocus = initiator;
     this.open = true;
     this.reconcile();
     this.shell.showSettings(() => {
       this.open = false;
+      this.results?.select('site');
       this.reconcile();
       if (initiator.isConnected) initiator.focus();
       else this.launcher.focus();
@@ -93,6 +102,7 @@ export class LibraryController {
     this.reconcile();
     if (!this.resultsMount) return;
     this.open = !this.open;
+    this.results?.select(this.open ? 'library' : 'site');
     this.reconcile();
     if (this.open) this.shell.focus();
     else {
@@ -104,6 +114,7 @@ export class LibraryController {
   }
 
   dispose(): void {
+    this.stopResults?.();
     this.stopObserving?.();
     this.unmountLauncher?.();
     this.resultsMount?.dispose();

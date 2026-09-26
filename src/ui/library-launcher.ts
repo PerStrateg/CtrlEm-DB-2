@@ -7,7 +7,6 @@ export class LibraryLauncher {
   readonly element: HTMLDivElement;
   private readonly button: HTMLButtonElement;
   private readonly status: HTMLSpanElement;
-  private readonly unsaved: HTMLSpanElement;
   private previousState?: LauncherState;
   private readonly onClick: (event: MouseEvent) => void;
 
@@ -26,11 +25,6 @@ export class LibraryLauncher {
     this.status.className = 'ctrlem-db-availability';
     this.status.setAttribute('role', 'status');
     this.element.append(this.button, this.status);
-    this.unsaved = document.createElement('span');
-    this.unsaved.className = 'ctrlem-db-unsaved';
-    this.unsaved.textContent = 'Unsaved changes';
-    this.unsaved.hidden = true;
-    this.element.append(this.unsaved);
 
     this.onClick = (event) => {
       event.stopPropagation();
@@ -58,8 +52,6 @@ export class LibraryLauncher {
   focus(): void {
     this.button.focus({ preventScroll: true });
   }
-
-  setUnsaved(unsaved: boolean): void { this.unsaved.hidden = !unsaved; }
 
   dispose(): void {
     this.button.removeEventListener('click', this.onClick);

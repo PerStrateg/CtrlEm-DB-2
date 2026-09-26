@@ -6,5 +6,3 @@
 .ctrlem-db-picker-card > .ctrlem-db-picker-preview { flex: 0 0 auto; font-size: 11px; padding: 3px; }
 .ctrlem-db-picker-grid .ctrlem-db-picker-card:has(> .ctrlem-db-picker-preview) { flex-direction: column; }
 .ctrlem-db-picker-grid .ctrlem-db-picker-preview { width: 64px; }
-.ctrlem-db-capture { font-size: .8rem; margin: 4px 0; overflow-wrap: anywhere; }
-.ctrlem-db-capture:empty { display: none; }

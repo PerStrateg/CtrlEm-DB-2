@@ -22,6 +22,9 @@ import '../ui/content-picker.css';
 import '../ui/media-preview.css';
 import '../ui/file-upload.css';
 import '../ui/auto-send.css';
+import '../ui/redgifs.css';
+import { ResultsController } from '../ui/results-controller';
+import { RedgifsController } from '../redgifs/redgifs-controller';
 
 // This global belongs to the extension's isolated world, not the page's scripts.
 // Reinjection replaces the previous controller and releases its DOM bindings.
@@ -30,10 +33,12 @@ const runtime = globalThis as typeof globalThis & {
 };
 
 runtime.ctrlEmLibraryController?.dispose();
-const shell = new LibraryController(new CtrlEmPage(document), () => editor.flushActive());
+const page = new CtrlEmPage(document);
+const results = new ResultsController();
+const shell = new LibraryController(page, () => editor.flushActive(), results);
 const client = new ExtensionLibraryClient();
 let transfer: TransferController | undefined;
-const editor = new EditorController(shell.content, client, dirty => { shell.setUnsaved(dirty); transfer?.refresh(); });
+const editor = new EditorController(shell.content, client, () => { transfer?.refresh(); });
 transfer = new TransferController(shell.database, client, editor);
 const fields = new CommandFields(document);
 const pickers = new PickerController(fields, client, (type, id, create, initiator) => {
@@ -50,10 +55,17 @@ const autoSend = new AutoSendController(autoPage, fields, pickers, new Extension
   if (key) { const value = command.fields.find(field => field.id === commands[key].fieldId)?.value;
     if (value !== undefined) capture.accepted(key, value); }
 }, new IntervalController(new ExtensionIntervalClient()));
-runtime.ctrlEmLibraryController = { dispose: () => { autoSend.dispose(); unbindAuto(); uploads.dispose(); capture.dispose(); transfer?.dispose(); pickers.dispose(); editor.dispose(); shell.dispose(); } };
+const redgifs = new RedgifsController(page, results, async url => {
+  const command = autoPage.native.capture('videoOverlay', false);
+  command.fields = command.fields.map(field => field.id === commands.videoOverlay.fieldId ? { ...field, value: url } : field);
+  await autoSend.queueCommand(command);
+});
+runtime.ctrlEmLibraryController = { dispose: () => { redgifs.dispose(); autoSend.dispose(); unbindAuto(); uploads.dispose(); capture.dispose(); transfer?.dispose(); pickers.dispose(); editor.dispose(); shell.dispose(); } };
 shell.start();
 editor.start();
 pickers.start();
 capture.start();
 uploads.start();
 autoSend.start();
+
+redgifs.start();

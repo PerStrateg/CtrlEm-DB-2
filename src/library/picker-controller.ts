@@ -13,7 +13,7 @@ import type { ImageLoader } from '../images/image-cache-client';
 
 interface PickerState {
   field: CommandField; view: ContentPickerView; gallery: SiteGallery; gallerySignature: string;
-  selection: PickerSelection; sequence: number; selectionError: boolean; previewBusy: boolean;
+  selection: PickerSelection; previewBusy: boolean;
   previewError?: { id: string; enabled: boolean; message: string };
   defaultValue?: string;
 }
@@ -120,13 +120,12 @@ export class PickerController implements AutoPickerSource {
             if (this.loadError) void this.load();
             else {
               const current = this.states.get(field.key)!;
-              if (current.selectionError) this.persistSelection(current);
               if (current.previewError) void this.setPreviews(field.key, current.previewError.enabled, current.previewError.id);
             }
           },
         }, this.imageLoader);
         state = { field, view, selection: { ...this.selections[field.key] }, gallery, gallerySignature: signature,
-          sequence: 0, selectionError: false, previewBusy: false };
+          previewBusy: false };
         this.states.set(field.key, state);
         this.render(state);
       }
@@ -170,7 +169,7 @@ export class PickerController implements AutoPickerSource {
     }
     state.view.render({ categories, items: this.loading || this.loadError ? [] : this.items(state), selection: this.displayedSelection(state),
       loading: this.loading, loadError: this.loadError,
-      error: [state.selectionError ? 'Couldn’t save selection. Retry.' : '', state.previewError?.message].filter(Boolean).join(' ') || undefined,
+      error: state.previewError?.message,
       image: type === 'image', previews: this.category(state)?.previewsEnabled ?? true, previewBusy: state.previewBusy,
       mediaType: type === 'sound' || type === 'video' ? type : undefined,
       emptyMessage: state.selection.categoryId === 'default'
@@ -205,15 +204,8 @@ export class PickerController implements AutoPickerSource {
     for (const listener of this.itemListeners) listener({ command: key, categoryId: state.selection.categoryId!, itemId: id });
   }
   private persistSelection(state: PickerState): void {
-    const sequence = ++state.sequence;
-    state.selectionError = false; this.render(state);
-    void this.client.select(state.field.key, { ...state.selection }).then(() => {
-      if (this.disposed || sequence !== state.sequence) return;
-      state.selectionError = false; this.render(state);
-    }, () => {
-      if (this.disposed || sequence !== state.sequence) return;
-      state.selectionError = true; this.render(state);
-    });
+    this.render(state);
+    void this.client.select(state.field.key, { ...state.selection }).catch(() => undefined);
   }
 
   private async setPreviews(key: CommandKey, enabled: boolean, id?: string): Promise<void> {
@@ -228,7 +220,7 @@ export class PickerController implements AutoPickerSource {
       if (this.disposed) return;
       this.accept(result.library);
       if (result.status === 'conflict') state.previewError = { id: category.id, enabled, message: 'Changed in another tab. Review the category and retry.' };
-    } catch { state.previewError = { id: category.id, enabled, message: 'Couldn’t save previews. Retry.' }; }
+    } catch { /* Keep the persisted preview setting; storage errors have no UI message. */ }
     finally {
       state.previewBusy = false;
       this.renderAll();

@@ -3,12 +3,6 @@
   font-size: 0.875rem;
 }
 
-.ctrlem-db-unsaved[hidden] { display: none !important; }
-.ctrlem-db-unsaved {
-  grid-column: 1 / -1;
-  color: var(--warning);
-  font-size: 0.8rem;
-}
 .ctrlem-db-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
 .ctrlem-db-tabpanel { display: grid; grid-template-columns: minmax(130px, 1fr) minmax(0, 2fr); gap: 16px; }
 .ctrlem-db-categories, .ctrlem-db-category-editor { min-width: 0; }

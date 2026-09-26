@@ -57,11 +57,15 @@ export class AutoSendController {
     this.reconcile(); void this.act({ type: 'auto:snapshot' }, 'connection', 'Connecting…');
   }
   private async enqueue(parameters: SendCommand): Promise<void> {
+    try { await this.queueCommand(parameters); }
+    catch { /* queueCommand renders the failure beside the queue. */ }
+  }
+  async queueCommand(parameters: SendCommand): Promise<void> {
     const request = { type: 'auto:enqueue' as const, id: crypto.randomUUID(), createdAt: Date.now(), parameters };
     try {
       this.accept(await this.client.request(request)); this.captured(parameters); this.error = undefined;
-    } catch (error) { this.error = error instanceof Error ? error.message : 'Could not add to queue.'; }
-    this.render();
+    } catch (error) { this.error = error instanceof Error ? error.message : 'Could not add to queue.'; throw error; }
+    finally { this.render(); }
   }
   private task(key: AutoCommandKey): AutoTask | undefined {
     return this.snapshot.tasks.find(task => task.receiver === this.receiver && task.command === key);

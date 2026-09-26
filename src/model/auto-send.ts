@@ -15,7 +15,7 @@ export const pauseReasons = {
   unknown: 'Result unknown. Check the page before resuming; the command may have been sent.',
   interrupted: 'Page reloaded or closed. Open the page, then Resume.',
   busy: 'Wait a moment, then Resume.',
-  storage: 'Couldn’t save changes. Try again.',
+  storage: '',
 } as const;
 export type PauseReason = keyof typeof pauseReasons;
 export interface AutoExecution {

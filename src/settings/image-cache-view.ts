@@ -26,7 +26,7 @@ export function mountImageCacheSettings(document: Document): void {
   const usage = section.querySelector<HTMLElement>('[data-cache-usage]')!;
   const busy = (value: boolean) => { select.disabled = clear.disabled = refresh.disabled = enable.disabled = value; };
   const update = async (message: ImageCacheSettingsRequest) => {
-    busy(true); status.textContent = message.type === 'image-cache:clear' ? 'Clearing…' : 'Loading…';
+    busy(true); status.textContent = message.type === 'image-cache:clear' ? 'Clearing…' : message.type === 'image-cache:limit' ? '' : 'Loading…';
     try {
       const reply: Reply<ImageCacheStatus> = await chrome.runtime.sendMessage(message);
       if (!reply.ok) throw new Error();
@@ -35,12 +35,11 @@ export function mountImageCacheSettings(document: Document): void {
       usage.textContent = `${(value.bytes / 1024 ** 2).toFixed(1)} MiB used · ${value.count} images`;
       access.textContent = value.access ? 'Access enabled for image hosts.' : 'Allow access to image hosts to keep a persistent cache. Images still display without it.';
       enable.hidden = value.access;
-      status.textContent = value.writeFailed ? 'Couldn’t save an image to disk. Free disk space or clear the cache.'
-        : message.type === 'image-cache:clear' ? 'Cache cleared. Visible images will load again.'
-          : message.type === 'image-cache:limit' ? 'Saved' : '';
+      status.textContent = message.type === 'image-cache:clear' ? 'Cache cleared. Visible images will load again.' : '';
       busy(false);
     } catch {
-      status.textContent = 'Couldn’t update image cache. Use Refresh cache status to retry.';
+      status.textContent = message.type === 'image-cache:limit' ? '' : 'Couldn’t update image cache. Use Refresh cache status to retry.';
+      if (message.type === 'image-cache:limit') busy(false);
       refresh.disabled = false; enable.disabled = false;
     }
   };

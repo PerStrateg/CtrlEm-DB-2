@@ -77,7 +77,6 @@ export class UploadController {
             row.status = 'Waiting'; row.error = undefined;
             this.pending.push({ state: current, row }); this.render(); void this.drain();
           },
-          save: id => { const current = this.states.get(field.key)!; void this.save(current, current.rows.find(row => row.id === id)!); },
           settings: initiator => {
             if (type === 'sound') {
               void this.client.openAccessSettings?.().catch(() => {

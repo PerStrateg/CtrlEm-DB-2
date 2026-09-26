@@ -54,33 +54,23 @@ export async function mountSettings(document: Document, client: CredentialsClien
       show.textContent = input.type === 'password' ? 'Show' : 'Hide';
       show.setAttribute('aria-label', `${show.textContent} ${field.label}`);
     };
-    const status = document.createElement('p');
-    status.setAttribute('role', 'status');
-    const retry = document.createElement('button');
-    retry.textContent = 'Retry';
-    retry.hidden = true;
     let saving = false;
     let revision = 0;
     const save = async () => {
       if (saving) return;
       saving = true;
-      retry.hidden = true;
-      status.textContent = 'Saving…';
       const current = revision;
       try {
         await client.save(field.id, input.value);
-        status.textContent = current === revision ? 'Saved' : 'Saving…';
       } catch {
-        status.textContent = 'Couldn’t save. Your text is still here. Retry.';
-        retry.hidden = false;
+        // Keep the edit in the field; the next edit attempts persistence again.
       } finally {
         saving = false;
         if (current !== revision) void save();
       }
     };
     input.oninput = () => { revision++; void save(); };
-    retry.onclick = () => void save();
-    section.append(label, help, input, show, status, retry);
+    section.append(label, help, input, show);
     root.append(section);
   }
 }

@@ -1,3 +1,5 @@
+import { registerRedgifs } from './redgifs-runtime';
+import { registerRedgifsAdblock } from './redgifs-adblock';
 import { receiverFromUrl } from '../model/send-command';
 import { authorizedTab, LibraryService } from './library-service';
 import { EditorSessionRepository, LibraryReadError, LibraryRepository } from '../storage/library-store';
@@ -19,6 +21,8 @@ import { intervalRequestSchema } from '../shared/interval-protocol';
 const libraryQueue = new WriteQueue();
 const scheduler = registerAutoSend(libraryQueue);
 registerImageCache();
+registerRedgifs();
+registerRedgifsAdblock();
 
 const credentials = new CredentialsRepository(chrome.storage.local, openCredentialKey);
 const credentialsQueue = new WriteQueue();
@@ -52,6 +56,7 @@ const service = new LibraryService(
 
 // Register listeners synchronously for service-worker/event-page wakeups.
 chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
+  if ((message as { type?: string })?.type?.startsWith('redgifs:')) return false;
   if ((message as { type?: string })?.type?.startsWith('interval:')) {
     const parsed = intervalRequestSchema.safeParse(message);
     if (authorizedTab(sender, chrome.runtime.id) === undefined || !parsed.success) {

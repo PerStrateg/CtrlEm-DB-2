@@ -38,7 +38,7 @@ export class IntervalController {
     }
   }
   register(key: AutoCommandKey, control: AutoSendControl): void {
-    const input = () => { field.dirty = true; field.version++; control.preferenceStatus('Unsaved interval', this.loaded); };
+    const input = () => { field.dirty = true; field.version++; control.preferenceStatus('', this.loaded); };
     const change = () => { if (control.interval.validity.valid) void this.flush(key); };
     const blur = () => { if (field.dirty) change(); else control.preferred(this.values[key] ?? autoSendLimits.defaultSeconds); };
     const field: Field = { control, dirty: false, version: 0, cleanup: () => {
@@ -55,14 +55,14 @@ export class IntervalController {
     if (field.work) { const saved = await field.work; return saved && field.dirty ? this.flush(key) : saved; }
     if (!field.dirty) return true;
     const version = field.version, seconds = field.control.interval.valueAsNumber;
-    field.control.preferenceStatus('Saving interval…', true);
+    field.control.preferenceStatus('', true);
     field.work = this.client.save(key, seconds).then(() => {
       if (this.disposed) return false;
       this.values[key] = seconds;
-      if (version === field.version) { field.dirty = false; field.control.preferred(seconds); field.control.preferenceStatus('Interval saved', true); }
+      if (version === field.version) { field.dirty = false; field.control.preferred(seconds); field.control.preferenceStatus('', true); }
       return true;
     }, () => {
-      if (!this.disposed && version === field.version) field.control.preferenceStatus('Couldn’t save interval.', true, () => { void this.flush(key); });
+      if (!this.disposed && version === field.version) field.control.preferenceStatus('', true);
       return false;
     });
     const saved = await field.work; field.work = undefined;

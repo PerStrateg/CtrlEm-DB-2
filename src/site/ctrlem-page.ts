@@ -55,4 +55,40 @@ export class CtrlEmPage {
       },
     };
   }
+
+  mountRedgifsLauncher(button: HTMLElement): void {
+    const heading = this.document.querySelector<HTMLElement>('[data-acc="videoOverlay"]');
+    if (!heading) return;
+    const parent = heading.parentElement!;
+    if (!parent.classList.contains('ctrlem-db-video-heading')) {
+      const row = this.document.createElement('div');
+      row.className = 'ctrlem-db-video-heading';
+      heading.before(row); row.append(heading, button);
+    } else if (button.parentElement !== parent) parent.append(button);
+  }
+
+  removeRedgifsLauncher(button: HTMLElement): void {
+    const row = button.parentElement;
+    button.remove();
+    if (row?.classList.contains('ctrlem-db-video-heading')) row.replaceWith(...row.childNodes);
+  }
+
+  mountRedgifs(panel: HTMLElement, content: HTMLElement): ResultsMount {
+    panel.append(content);
+    return {
+      setOpen: open => panel.classList.toggle('ctrlem-db-redgifs-open', open),
+      dispose: () => { panel.classList.remove('ctrlem-db-redgifs-open'); content.remove(); },
+    };
+  }
+
+  redgifsHeight(): number {
+    const win = this.document.defaultView!;
+    const navHeight = this.document.querySelector('nav.navbar')?.getBoundingClientRect().height ?? 0;
+    return Math.max(564, Math.round((win.visualViewport?.height ?? win.innerHeight) - navHeight - 16));
+  }
+
+  alignResults(panel: HTMLElement): void {
+    const navHeight = this.document.querySelector('nav.navbar')?.getBoundingClientRect().height ?? 0;
+    this.document.defaultView?.scrollBy(0, panel.getBoundingClientRect().top - navHeight);
+  }
 }
