@@ -4,6 +4,7 @@ export const libraryRegionId = 'ctrlem-db-library';
 export class LibraryShell {
   readonly element: HTMLElement;
   readonly content: HTMLDivElement;
+  readonly database: HTMLDivElement;
   private readonly heading: HTMLHeadingElement;
   private readonly settings: HTMLDivElement;
   private readonly libraryButton: HTMLButtonElement;
@@ -37,13 +38,15 @@ export class LibraryShell {
     this.settingsButton.textContent = 'Settings';
     this.settings = document.createElement('div');
     this.settings.className = 'ctrlem-db-settings';
+    this.database = document.createElement('div'); this.database.className = 'ctrlem-db-database';
+    this.settings.append(this.database);
     this.back = document.createElement('button');
     this.back.type = 'button';
     this.back.textContent = 'Back to upload';
     this.back.hidden = true;
     this.libraryButton.onclick = () => this.showCategories();
     this.settingsButton.onclick = () => {
-      if (!this.settings.firstChild) {
+      if (!this.settings.querySelector('iframe')) {
         const frame = document.createElement('iframe');
         frame.title = 'Upload provider settings';
         frame.src = chrome.runtime.getURL('settings.html');

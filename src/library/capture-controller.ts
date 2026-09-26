@@ -17,6 +17,10 @@ export class CaptureController {
       if (!this.isDefault(field.key, value)) void this.capture(field, value);
     });
   }
+  accepted(key: CommandKey, value: string): void {
+    const field = this.page.find().find(field => field.key === key);
+    if (field && !this.isDefault(key, value)) void this.capture(field, value);
+  }
   private async capture(field: CommandField, value: string): Promise<void> {
     let state = this.states.get(field.key);
     if (!state) {

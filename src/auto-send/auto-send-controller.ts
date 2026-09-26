@@ -1,3 +1,4 @@
+import type { SendCommand } from '../model/send-command';
 import { emptyAutoState } from '../model/auto-send';
 import type { AutoCommandKey, AutoTask } from '../model/auto-send';
 import { AutoConnectionError } from '../shared/auto-send-protocol';
@@ -21,9 +22,11 @@ export class AutoSendController {
   private readonly cleanups: (() => void)[] = [];
   readonly panel: AutoTaskPanel;
   constructor(private readonly page: AutoSendPage, private readonly fields: CommandFields,
-    private readonly pickers: AutoPickerSource, private readonly client: AutoClient) {
+    private readonly pickers: AutoPickerSource, private readonly client: AutoClient,
+    private readonly captured: (command: SendCommand) => void = () => {}) {
     this.receiver = page.receiver();
     this.panel = new AutoTaskPanel(page.document, {
+      dismiss: id => { void this.act({ type: 'auto:dismiss', id }); },
       stop: id => { void this.act({ type: 'auto:stop', id }, id, 'Stopping…'); },
       resume: id => { void this.act({ type: 'auto:resume', id }, id, 'Starting…'); },
       open: id => { void this.act({ type: 'auto:open', id }, id, 'Opening…'); },
@@ -35,13 +38,14 @@ export class AutoSendController {
     });
   }
   start(): void {
+    this.page.native.mount(command => { void this.enqueue(command); },
+      () => { void this.client.request({ type: 'auto:ready' }).catch(() => undefined); },
+      message => { this.error = message; this.render(); });
     this.cleanups.push(this.client.subscribe(snapshot => {
       if (snapshot) this.accept(snapshot); else this.connected = false;
       this.render();
     }), this.pickers.subscribeItemChoice(choice => this.selected(choice)),
-    this.fields.observe(() => this.reconcile()), this.page.observeManual(() => {
-      void this.act({ type: 'auto:manual' });
-    }));
+    this.fields.observe(() => this.reconcile()));
     const window = this.page.document.defaultView!;
     const detached = () => { void this.client.request({ type: 'auto:detach' }).catch(() => undefined); this.page.dispose(); };
     const restored = (event: PageTransitionEvent) => { if (event.persisted) void this.act({ type: 'auto:snapshot' }); };
@@ -49,6 +53,13 @@ export class AutoSendController {
     const timer = window.setInterval(() => this.reconcile(), 1000);
     this.cleanups.push(() => { window.removeEventListener('pagehide', detached); window.removeEventListener('pageshow', restored); window.clearInterval(timer); });
     this.reconcile(); void this.act({ type: 'auto:snapshot' }, 'connection', 'Connecting…');
+  }
+  private async enqueue(parameters: SendCommand): Promise<void> {
+    const request = { type: 'auto:enqueue' as const, id: crypto.randomUUID(), createdAt: Date.now(), parameters };
+    try {
+      this.accept(await this.client.request(request)); this.captured(parameters); this.error = undefined;
+    } catch (error) { this.error = error instanceof Error ? error.message : 'Could not add to queue.'; }
+    this.render();
   }
   private task(key: AutoCommandKey): AutoTask | undefined {
     return this.snapshot.tasks.find(task => task.receiver === this.receiver && task.command === key);
@@ -93,13 +104,13 @@ export class AutoSendController {
   }
   private toggle(key: AutoCommandKey): void {
     const task = this.task(key);
-    if (task?.status === 'paused') { void this.act({ type: 'auto:resume', id: task.id }, task.id, 'Starting…'); return; }
+    if (task?.status === 'paused' && task.reason !== 'invalid') { void this.act({ type: 'auto:resume', id: task.id }, task.id, 'Starting…'); return; }
     if (task) { void this.act({ type: 'auto:stop', id: task.id }, task.id, 'Stopping…'); return; }
     const control = this.controls.get(key)!;
     if (!control.interval.reportValidity()) return;
     const context = key === 'sendOrDelete' ? undefined : this.pickers.context(key);
     if (context?.loading || context?.loadError) { this.error = 'Wait for the library to load, then retry.'; this.render(); return; }
-    void this.act({ type: 'auto:start', command: key, categoryId: context?.selection.categoryId,
+    void this.act({ type: 'auto:start', command: key, parameters: this.page.native.capture(key, false), categoryId: context?.selection.categoryId,
       itemId: context?.selection.itemId, intervalSeconds: control.interval.valueAsNumber }, key, 'Starting…');
   }
   private reconcile(): void {

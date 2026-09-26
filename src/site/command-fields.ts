@@ -9,6 +9,7 @@ export interface SiteGallery { available: boolean; pending: boolean; failed: boo
 export class CommandFields {
   private readonly hiddenGalleries = new Set<HTMLElement>();
   private readonly hiddenUploadNodes = new Set<HTMLElement>();
+  private readonly uploadLabels = new Set<HTMLElement>();
   constructor(readonly document: Document) {}
 
   syncGalleryVisibility(fields: CommandField[]): void {
@@ -43,6 +44,11 @@ export class CommandFields {
 
   mountUpload(field: CommandField, element: HTMLElement): void {
     const anchor = this.nativeUpload(field.key) ?? field.input.previousElementSibling?.closest('.cmd-label') ?? field.input;
+    const hint = this.nativeUpload(field.key)?.querySelector('.upload-hint');
+    if (hint && !hint.querySelector('.ctrlem-db-native-provider')) {
+      const label = this.document.createElement('strong'); label.className = 'ctrlem-db-native-provider';
+      label.append('CtrlEm', this.document.createTextNode(' · ')); hint.prepend(label); this.uploadLabels.add(label);
+    }
     if (anchor.previousElementSibling !== element) anchor.before(element);
   }
 
@@ -60,6 +66,8 @@ export class CommandFields {
     }
   }
   restoreUploads(): void {
+    for (const label of this.uploadLabels) label.remove();
+    this.uploadLabels.clear();
     for (const node of this.hiddenUploadNodes) node.classList.remove('ctrlem-db-upload-hidden');
     this.hiddenUploadNodes.clear();
   }

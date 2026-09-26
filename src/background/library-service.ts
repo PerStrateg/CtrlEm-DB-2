@@ -2,12 +2,12 @@ import { requestSchema } from '../shared/library-protocol';
 import type { LibraryRequest } from '../shared/library-protocol';
 import { EditorSessionRepository, LibraryRepository, WriteQueue } from '../storage/library-store';
 import { SelectionRepository } from '../storage/selection-store';
+import { receiverFromUrl } from '../model/send-command';
 import { commands } from '../model/commands';
 
 export function authorizedTab(sender: chrome.runtime.MessageSender, extensionId: string): number | undefined {
   if (sender.id !== extensionId || sender.frameId !== 0 || sender.tab?.id === undefined || !sender.url) return;
-  const url = new URL(sender.url);
-  if (url.origin === 'https://ctrlem.com' && /^\/u\/[^/]+\/?$/.test(url.pathname)) return sender.tab.id;
+  if (receiverFromUrl(sender.url)) return sender.tab.id;
 }
 
 export class LibraryService {

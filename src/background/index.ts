@@ -1,3 +1,4 @@
+import { receiverFromUrl } from '../model/send-command';
 import { authorizedTab, LibraryService } from './library-service';
 import { EditorSessionRepository, LibraryReadError, LibraryRepository } from '../storage/library-store';
 import type { ChangeResult } from '../model/library';
@@ -18,7 +19,7 @@ const credentialsQueue = new WriteQueue();
 const uploadRequest = diagnosticUploadFetch(chrome.webRequest, chrome.runtime.getURL(''), fetch, chrome.permissions);
 
 const accessChanged = () => {
-  void chrome.tabs.query({ url: 'https://ctrlem.com/u/*' }).then(tabs => Promise.all(tabs.map(tab =>
+  void chrome.tabs.query({ url: ['https://ctrlem.com/u/*', 'https://ctrlem.com/groups/*'] }).then(tabs => Promise.all(tabs.map(tab =>
     tab.id === undefined ? undefined : chrome.tabs.sendMessage(tab.id, { type: 'upload:settings-changed' }).catch(() => undefined)
   ))).catch(() => console.warn('[CtrlEm DB] Could not notify provider access change.'));
 };
@@ -50,7 +51,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
       await credentials.save(request.field, request.value);
       if (request.field === 'imgbb') {
         // Notification failure must not turn a completed credential save into an error.
-        void chrome.tabs.query({ url: 'https://ctrlem.com/u/*' }).then(tabs =>
+        void chrome.tabs.query({ url: ['https://ctrlem.com/u/*', 'https://ctrlem.com/groups/*'] }).then(tabs =>
           Promise.all(tabs.map(tab => tab.id === undefined ? undefined :
             chrome.tabs.sendMessage(tab.id, { type: 'upload:settings-changed' }).catch(() => undefined)))
         ).catch(() => console.warn('[CtrlEm DB] Could not notify provider settings change.'));
@@ -82,14 +83,16 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
   }
   void (async () => {
     try {
-      const receiver = new URL(sender.url!).pathname.split('/')[2]!;
+      const pageReceiver = receiverFromUrl(sender.url!);
+      // Keep existing profile selection keys; groups have their own namespace.
+      const receiver = pageReceiver.startsWith('group:') ? pageReceiver : new URL(sender.url!).pathname.split('/')[2]!;
       const value = await service.handle(tabId, message, receiver);
       respond({ ok: true, value });
       if (['library:change', 'library:capture', 'library:import', 'library:add-upload'].includes((message as { type: string }).type)) {
         const result = value as Pick<ChangeResult, 'library'> & { status: string };
         if (result.status === 'saved') {
           try {
-            const tabs = await chrome.tabs.query({ url: 'https://ctrlem.com/u/*' });
+            const tabs = await chrome.tabs.query({ url: ['https://ctrlem.com/u/*', 'https://ctrlem.com/groups/*'] });
             await Promise.all(tabs.map(async tab => {
               if (tab.id === undefined) return;
               // Tabs can close or have no receiver between query and delivery.

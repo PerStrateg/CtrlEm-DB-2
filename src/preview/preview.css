@@ -1,0 +1,5 @@
+body { margin: 0; padding: 0; overflow: hidden; }
+audio, video { display: block; width: 100%; }
+video { max-height: 300px; aspect-ratio: 16 / 9; background: #000; }
+p { margin: 6px 0; color: var(--text-secondary); }
+p:empty { display: none; }

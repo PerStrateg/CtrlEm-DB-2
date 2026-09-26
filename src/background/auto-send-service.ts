@@ -1,6 +1,7 @@
+import { sendQueueLimits } from '../model/send-command';
 import { commands } from '../model/commands';
-import { autoSendLimits, emptyAutoState, nextAutoItem } from '../model/auto-send';
-import type { AutoExecution, AutoOutcome, AutoState, AutoTask, PauseReason } from '../model/auto-send';
+import { autoSendLimits, emptyAutoState, nextAutoItem, isManualSend as manual, orderedQueue, queueAvailableAt } from '../model/auto-send';
+import type { AutoExecution, AutoOutcome, AutoState, AutoTask, QueueEntry, PauseReason } from '../model/auto-send';
 import type { Item } from '../model/library';
 import { AutoSendRepository } from '../storage/auto-send-store';
 import { LibraryRepository, WriteQueue } from '../storage/library-store';
@@ -14,6 +15,7 @@ export interface AutoTransport {
   changed(snapshot: AutoSnapshot | undefined): void;
   wakeAt(time: number | undefined): void;
 }
+const command = (entry: QueueEntry): string => manual(entry) ? entry.parameters.key : entry.command;
 export class AutoSendError extends Error {}
 
 /** One serialized owner. Persist the execution token before any native side effect. */
@@ -33,17 +35,24 @@ export class AutoSendService {
     const state = structuredClone(this.state);
     for (const task of state.tasks) if (task.execution) {
       // A sleeping worker may have missed the reply. Never replay its token.
-      this.pause(task, 'unknown');
-      state.nextAllowedAt = Math.max(state.nextAllowedAt, this.now() + autoSendLimits.minSeconds * 1000);
+      this.notice(state, task);
+      this.cooldown(state, task, this.now());
+      if (task.status === 'stopping') state.tasks = state.tasks.filter(entry => entry !== task);
+      else this.advance(task, this.now());
     }
-    if (state.tasks.length) this.readyReceivers = [...new Set((await this.transport.pages()).map(({ page }) => page.receiver))];
+    for (const send of state.sends.filter(send => send.execution)) {
+      this.notice(state, send); this.cooldown(state, send, this.now());
+      state.sends = state.sends.filter(item => item !== send);
+    }
+    if (state.tasks.length || state.sends.length) this.readyReceivers = [...new Set((await this.transport.pages()).map(({ page }) => page.receiver))];
     await this.commit(state);
     this.loaded = true;
   }
-  private pause(task: AutoTask, reason: PauseReason): void {
+  private pause(task: QueueEntry, reason: PauseReason): void {
     task.status = 'paused'; task.reason = reason; delete task.execution;
   }
   private async commit(state: AutoState): Promise<void> {
+    state.acceptedRequests = state.acceptedRequests.filter(request => request.expiresAt > this.now());
     state.revision = this.state.revision + 1;
     try { await this.repository.save(state); }
     catch {
@@ -53,11 +62,36 @@ export class AutoSendService {
     this.state = state; this.fault = false;
     this.transport.changed(this.snapshot()); this.schedule();
   }
-  private snapshot(): AutoSnapshot { return { ...structuredClone(this.state), readyReceivers: [...this.readyReceivers] }; }
+  private snapshot(): AutoSnapshot {
+    const { acceptedRequests, ...visible } = this.state;
+    return { ...structuredClone(visible), readyReceivers: [...this.readyReceivers] };
+  }
+  private entries(state = this.state): QueueEntry[] { return [...state.sends, ...state.tasks]; }
+  private availableAt(entry: QueueEntry, state = this.state): number { return queueAvailableAt(entry, state); }
+  private ordered(state = this.state): QueueEntry[] { return orderedQueue(state, this.now()).filter(entry => entry.status === 'queued'); }
   private schedule(): void {
-    const running = this.state.tasks.find(task => task.execution);
-    const times = this.state.tasks.filter(task => task.status === 'queued').map(task => Math.max(task.dueAt, this.state.nextAllowedAt));
-    this.transport.wakeAt(this.fault ? undefined : running?.execution?.deadline ?? (times.length ? Math.min(...times) : undefined));
+    const running = this.entries().find(task => task.execution);
+    const times = this.entries().filter(task => task.status === 'queued').map(task => this.availableAt(task));
+    const executionWake = running?.execution?.deadline;
+    const workTimes = executionWake === undefined ? times : [executionWake];
+    const deadlines = [...workTimes, ...this.state.acceptedRequests.map(request => request.expiresAt)];
+    this.transport.wakeAt(this.fault || !deadlines.length ? undefined : Math.min(...deadlines));
+  }
+  private notice(state: AutoState, entry: QueueEntry): void {
+    state.notices.push({ id: crypto.randomUUID(), receiver: entry.receiver,
+      label: manual(entry) ? entry.parameters.label : entry.command, message: 'Unconfirmed. Not repeated.' });
+  }
+  private cooldown(state: AutoState, entry: QueueEntry, now: number): void {
+    state.nextAllowedAt = Math.max(state.nextAllowedAt, now + sendQueueLimits.userMs);
+    if (entry.receiver.startsWith('group:')) state.groupAllowedAt = Math.max(state.groupAllowedAt, now + sendQueueLimits.groupMs);
+  }
+  private advance(task: AutoTask, now: number): void {
+    if (task.execution && task.selectionRevision === task.execution.selectionRevision) {
+      const index = task.orderIds.indexOf(task.execution.itemId ?? '');
+      task.nextItemId = task.orderIds[(index + 1) % task.orderIds.length];
+    }
+    task.status = 'queued'; task.dueAt = now + task.intervalSeconds * 1000;
+    task.retryCount = 0; delete task.execution; delete task.retryExecution; delete task.reason; delete task.failureCode;
   }
   private async items(task: AutoTask, page: AutoPageState): Promise<Item[]> {
     if (task.command === 'sendOrDelete') return [];
@@ -72,23 +106,40 @@ export class AutoSendService {
       await this.load();
       if (this.fault) {
         const recovered = structuredClone(this.state);
-        for (const task of recovered.tasks) this.pause(task, 'storage');
+        for (const task of this.entries(recovered)) this.pause(task, 'storage');
         recovered.nextAllowedAt = this.now() + autoSendLimits.minSeconds * 1000;
         await this.commit(recovered);
       }
       const state = structuredClone(this.state);
       switch (request.type) {
+        case 'auto:claim': return this.snapshot();
+        case 'auto:ready': {
+          for (const entry of this.entries(state)) if (entry.tabId === tabId && entry.status === 'queued' && entry.reason === 'busy') { delete entry.readinessAt; delete entry.reason; }
+          break;
+        }
+        case 'auto:dismiss': state.notices = state.notices.filter(notice => notice.id !== request.id); break;
+        case 'auto:enqueue': {
+          if (state.sends.some(send => send.id === request.id) || state.acceptedRequests.some(entry => entry.id === request.id && entry.expiresAt > this.now())) return this.snapshot();
+          const expiresAt = request.createdAt + sendQueueLimits.requestWindowMs;
+          if (expiresAt <= this.now() || request.createdAt > this.now()) throw new AutoSendError('Send request expired. Click Send again if needed.');
+          const page = await this.transport.probe(tabId);
+          if (!page || page.receiver !== receiver || !page.nativeCommands.includes(request.parameters.key)) throw new AutoSendError('Command is unavailable on this page.');
+          state.sends.push({ id: request.id, receiver, tabId, parameters: request.parameters, status: 'queued',
+            dueAt: this.now(), sequence: ++state.sequence, retryCount: 0 });
+          state.acceptedRequests.push({ id: request.id, expiresAt }); break;
+        }
         case 'auto:snapshot': {
           this.readyReceivers = [...new Set((await this.transport.pages()).map(({ page }) => page.receiver))];
           this.transport.changed(this.snapshot());
           this.schedule(); return this.snapshot();
         }
         case 'auto:start': {
+          if (request.parameters && request.parameters.key !== request.command) throw new AutoSendError('Command parameters do not match.');
           if (state.tasks.some(task => task.receiver === receiver && task.command === request.command)) return this.snapshot();
           const page = await this.transport.probe(tabId);
           if (!page || page.receiver !== receiver || !page.commands.includes(request.command)) throw new AutoSendError('Open the command on the recipient’s page.');
           const task: AutoTask = { id: crypto.randomUUID(), receiver, command: request.command, tabId,
-            categoryId: request.categoryId, categoryName: request.categoryId === 'default' ? 'Default' : '',
+            parameters: request.parameters, categoryId: request.categoryId, categoryName: request.categoryId === 'default' ? 'Default' : '',
             intervalSeconds: request.intervalSeconds, status: 'queued', dueAt: this.now(), orderIds: [], nextItemId: request.itemId, selectionRevision: 0 };
           const items = await this.items(task, page);
           if (task.command !== 'sendOrDelete' && !items.length) throw new AutoSendError('Choose a non-empty category.');
@@ -107,11 +158,16 @@ export class AutoSendService {
           const items = await this.items(task, page);
           if (!items.some(item => item.id === request.itemId)) throw new AutoSendError('The selected item is no longer available. Choose another item.');
           task.nextItemId = task.highlightedItemId = request.itemId;
-          task.orderIds = items.map(item => item.id); task.selectionRevision++;
+          task.orderIds = items.map(item => item.id); task.selectionRevision++; delete task.retryExecution;
           break;
         }
         case 'auto:stop':
         case 'auto:stop-all': {
+          state.sends = state.sends.filter(send => {
+            if (request.type === 'auto:stop' && send.id !== request.id) return true;
+            if (!send.execution) return false;
+            send.status = 'stopping'; return true;
+          });
           state.tasks = state.tasks.filter(task => {
             if (request.type === 'auto:stop' && task.id !== request.id) return true;
             if (!task.execution) return false;
@@ -119,18 +175,19 @@ export class AutoSendService {
           }); break;
         }
         case 'auto:resume': {
-          const task = state.tasks.find(task => task.id === request.id);
+          const task = this.entries(state).find(task => task.id === request.id);
           if (!task || task.status !== 'paused') return this.snapshot();
+          if (task.reason === 'invalid') throw new AutoSendError('Cancel or stop this task, correct the command, then send again.');
           const pages = await this.transport.pages();
-          const candidates = pages.filter(({ page }) => page.receiver === task.receiver && page.commands.includes(task.command));
+          const candidates = pages.filter(({ page }) => page.receiver === task.receiver && page.nativeCommands.includes(command(task)));
           const candidate = candidates.find(page => page.tabId === tabId) ?? candidates.find(page => page.tabId === task.tabId) ?? candidates[0];
           if (!candidate) throw new AutoSendError('Open the recipient’s page before resuming.');
-          const items = await this.items(task, candidate.page);
-          if (task.command !== 'sendOrDelete' && !items.length) throw new AutoSendError('Choose a non-empty category. Stop this task to change its source.');
-          task.tabId = candidate.tabId; task.status = 'queued'; delete task.reason; task.dueAt = this.now(); break;
+          const items = manual(task) || task.retryExecution ? [] : await this.items(task, candidate.page);
+          if (!manual(task) && !task.retryExecution && task.command !== 'sendOrDelete' && !items.length) throw new AutoSendError('Choose a non-empty category. Stop this task to change its source.');
+          task.tabId = candidate.tabId; task.status = 'queued'; task.retryCount = 0; delete task.reason; delete task.failureCode; task.dueAt = this.now(); break;
         }
         case 'auto:open': {
-          const task = state.tasks.find(task => task.id === request.id);
+          const task = this.entries(state).find(task => task.id === request.id);
           if (task) await this.transport.open(task.receiver);
           return this.snapshot();
         }
@@ -141,16 +198,20 @@ export class AutoSendService {
     });
   }
   private detach(state: AutoState, tabId: number): void {
-    state.tasks = state.tasks.filter(task => task.tabId !== tabId || task.status !== 'stopping');
-    for (const task of state.tasks) if (task.tabId === tabId) {
-      this.pause(task, 'interrupted');
-      state.nextAllowedAt = Math.max(state.nextAllowedAt, this.now() + autoSendLimits.minSeconds * 1000);
+    for (const entry of this.entries(state).filter(entry => entry.tabId === tabId)) {
+      if (entry.execution) {
+        this.notice(state, entry);
+        this.cooldown(state, entry, this.now());
+        if (manual(entry)) state.sends = state.sends.filter(send => send !== entry);
+        else if (entry.status === 'stopping') state.tasks = state.tasks.filter(task => task !== entry);
+        else { this.advance(entry, this.now()); this.pause(entry, 'interrupted'); }
+      } else this.pause(entry, 'interrupted');
     }
   }
   removeTab(tabId: number): Promise<void> {
     return this.queue.run(async () => {
       await this.load();
-      if (!this.state.tasks.some(task => task.tabId === tabId)) return;
+      if (!this.entries().some(task => task.tabId === tabId)) return;
       const state = structuredClone(this.state); this.detach(state, tabId);
       await this.commit(state);
     });
@@ -159,16 +220,16 @@ export class AutoSendService {
     const candidate = await this.queue.run(async () => {
       await this.load();
       if (this.fault || this.preparing) return;
+      if (this.state.acceptedRequests.some(request => request.expiresAt <= this.now())) await this.commit(structuredClone(this.state));
       const state = structuredClone(this.state), now = this.now();
-      const running = state.tasks.find(task => task.execution);
+      const running = this.entries(state).find(task => task.execution);
       if (running) {
         if (running.execution!.deadline <= now) await this.finish(running.execution!.token, { status: 'paused', reason: 'unknown' });
         else this.schedule();
         return;
       }
-      const task = state.tasks.filter(task => task.status === 'queued')
-        .sort((a, b) => a.dueAt - b.dueAt)[0];
-      if (!task || Math.max(task.dueAt, state.nextAllowedAt) > now) { this.schedule(); return; }
+      const task = this.ordered(state)[0];
+      if (!task || this.availableAt(task, state) > now) { this.schedule(); return; }
       this.preparing = true;
       return task;
     });
@@ -177,19 +238,38 @@ export class AutoSendService {
     let items: Item[] = [], reason: PauseReason | undefined;
     try {
       const page = await this.transport.probe(candidate.tabId);
-      if (!page || page.receiver !== candidate.receiver || !page.commands.includes(candidate.command)) reason = 'unavailable';
-      else items = await this.items(candidate, page);
+      if (!page || page.receiver !== candidate.receiver || !page.nativeCommands.includes(command(candidate))) reason = 'unavailable';
+      else if (!page.readyCommands.includes(command(candidate))) reason = 'busy';
+      else if (!manual(candidate) && !candidate.retryExecution) items = await this.items(candidate, page);
     } catch { reason = 'storage'; }
     await this.queue.run(async () => {
       this.preparing = false;
       if (this.fault) return;
-      const state = structuredClone(this.state), task = state.tasks.find(task => task.id === candidate.id);
+      const state = structuredClone(this.state), task = this.entries(state).find(task => task.id === candidate.id);
       if (!task || task.status !== 'queued' || task.tabId !== candidate.tabId ||
-        Math.max(task.dueAt, state.nextAllowedAt) > this.now()) { this.schedule(); return; }
+        this.availableAt(task, state) > this.now()) { this.schedule(); return; }
       // A choice made during preparation needs a fresh view of its source.
-      if (task.selectionRevision !== candidate.selectionRevision) { this.schedule(); return; }
-      if (reason) { this.pause(task, reason); await this.commit(state); return; }
-      task.categoryName = candidate.categoryName;
+      if (!manual(task) && !manual(candidate) && task.selectionRevision !== candidate.selectionRevision) { this.schedule(); return; }
+      if (reason) {
+        if (reason === 'busy') { task.reason = 'busy'; task.readinessAt = this.now() + sendQueueLimits.readinessPollMs; }
+        else this.pause(task, reason);
+        await this.commit(state); return;
+      }
+      // A manual click received during preparation has priority over a recurring task.
+      if (!manual(task) && this.ordered(state).some(entry => manual(entry) && this.availableAt(entry, state) <= this.now())) { this.schedule(); return; }
+      delete task.readinessAt;
+      if (manual(task)) {
+        task.status = 'running'; delete task.reason;
+        task.execution = { token: crypto.randomUUID(), receiver: task.receiver, command: task.parameters.key,
+          parameters: task.parameters, selectionRevision: 0, deadline: this.now() + autoSendLimits.resultTimeoutMs };
+        await this.dispatch(state, task); return;
+      }
+      if (task.retryExecution) {
+        task.status = 'running';
+        task.execution = { ...task.retryExecution, token: crypto.randomUUID(), deadline: this.now() + autoSendLimits.resultTimeoutMs };
+        await this.dispatch(state, task); return;
+      }
+      task.categoryName = (candidate as AutoTask).categoryName;
       const item = nextAutoItem(task, items);
       if (task.command !== 'sendOrDelete' && !item) {
         this.pause(task, 'empty'); await this.commit(state); return;
@@ -198,33 +278,52 @@ export class AutoSendService {
       task.highlightedItemId = item?.id;
       task.status = 'running';
       task.execution = { token: crypto.randomUUID(), receiver: task.receiver, command: task.command,
-        value: item?.value, itemId: item?.id, selectionRevision: task.selectionRevision,
+        parameters: task.parameters, value: item?.value, itemId: item?.id, selectionRevision: task.selectionRevision,
         deadline: this.now() + autoSendLimits.resultTimeoutMs };
-      await this.commit(state);
-      // Do not occupy the mutation queue while the site answers: Stop must still work.
-      const token = task.execution.token;
-      void this.transport.execute(task.tabId, task.execution).then(
-        outcome => this.result(token, outcome),
-        () => this.result(token, { status: 'paused', reason: 'unknown' }),
-      ).catch(() => { /* commit already published the storage failure and stopped the clock */ });
+      await this.dispatch(state, task);
     });
+  }
+  private async dispatch(state: AutoState, task: QueueEntry): Promise<void> {
+    await this.commit(state);
+    const token = task.execution!.token;
+    void this.transport.execute(task.tabId, task.execution!).then(
+      outcome => this.result(token, outcome),
+      () => this.result(token, { status: 'paused', reason: 'unknown' }),
+    ).catch(() => { /* commit published the storage failure */ });
   }
   private result(token: string, outcome: AutoOutcome): Promise<void> {
     return this.queue.run(() => this.finish(token, outcome));
   }
   private async finish(token: string, outcome: AutoOutcome): Promise<void> {
-    const state = structuredClone(this.state), task = state.tasks.find(task => task.execution?.token === token);
+    const state = structuredClone(this.state), task = this.entries(state).find(task => task.execution?.token === token);
     if (!task) return;
-    state.nextAllowedAt = Math.max(state.nextAllowedAt, this.now() + autoSendLimits.minSeconds * 1000);
-    if (task.status === 'stopping') state.tasks = state.tasks.filter(candidate => candidate !== task);
-    else if (outcome.status === 'success') {
-      if (task.selectionRevision === task.execution!.selectionRevision) {
-        const index = task.orderIds.indexOf(task.execution!.itemId ?? '');
-        task.nextItemId = task.orderIds[(index + 1) % task.orderIds.length];
-      }
-      task.status = 'queued'; task.dueAt = this.now() + task.intervalSeconds * 1000; delete task.execution;
-    } else this.pause(task, outcome.reason);
-    if (this.fault) for (const candidate of state.tasks) this.pause(candidate, 'storage');
+    const now = this.now();
+    const beforeClick = outcome.status === 'paused' && ['busy', 'unavailable', 'interrupted'].includes(outcome.reason);
+    if (!beforeClick) this.cooldown(state, task, now);
+    const remove = () => {
+      if (manual(task)) state.sends = state.sends.filter(entry => entry !== task);
+      else state.tasks = state.tasks.filter(entry => entry !== task);
+    };
+    if (task.status === 'stopping') remove();
+    else if (outcome.status === 'success' || outcome.reason === 'unknown') {
+      if (outcome.status !== 'success') this.notice(state, task);
+      if (manual(task)) remove(); else this.advance(task, now);
+    } else if (outcome.reason === 'failed' || outcome.reason === 'busy') {
+      const count = outcome.reason === 'failed' ? (task.retryCount ?? 0) + 1 : task.retryCount ?? 0;
+      task.retryCount = count;
+      if (outcome.reason === 'failed') task.failureCode = outcome.failureCode;
+      const base = task.receiver.startsWith('group:') ? sendQueueLimits.groupMs : sendQueueLimits.userMs;
+      const delay = outcome.reason === 'busy' ? sendQueueLimits.readinessPollMs :
+        Math.max(outcome.retryAfterMs ?? 0, Math.min(sendQueueLimits.retryMaxMs, base * 2 ** Math.min(count - 1, 5)));
+      if (!manual(task) && outcome.reason === 'failed') task.retryExecution = task.execution;
+      task.status = outcome.reason === 'failed' && count > sendQueueLimits.maxRetries ? 'paused' : 'queued';
+      task.reason = outcome.reason;
+      if (outcome.reason === 'busy') task.readinessAt = now + delay;
+      else task.dueAt = now + delay;
+      delete task.execution;
+      if (manual(task) && outcome.reason === 'failed') task.sequence = ++state.sequence;
+    } else { task.failureCode = outcome.failureCode; this.pause(task, outcome.reason); }
+    if (this.fault) for (const candidate of this.entries(state)) this.pause(candidate, 'storage');
     await this.commit(state);
   }
 }

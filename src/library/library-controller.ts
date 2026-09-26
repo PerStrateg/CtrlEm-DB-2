@@ -23,6 +23,7 @@ export class LibraryController {
   }
 
   get content(): HTMLElement { return this.shell.content; }
+  get database(): HTMLElement { return this.shell.database; }
   setUnsaved(unsaved: boolean): void { this.launcher.setUnsaved(unsaved); }
 
   openFrom(initiator: HTMLElement): void {

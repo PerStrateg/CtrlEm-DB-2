@@ -2,6 +2,7 @@ import { mountSettings } from './settings-view';
 import type { Credentials, CredentialsRequest } from '../shared/credentials-protocol';
 import type { Reply } from '../shared/library-protocol';
 import '../ui/common.css';
+import '../ui/extension-theme.css';
 import './settings.css';
 import { mountProviderAccess } from './provider-access-view';
 

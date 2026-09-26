@@ -37,10 +37,8 @@ export type ImportMode = 'append' | 'replace';
 export interface ImportPlan { categories: Category[]; baseRevision: number; warnings: string[] }
 export interface ImportResult { status: 'saved' | 'conflict'; library: Library; categoryIds: string[] }
 
-export function exportLibrary(library: Library, categoryId?: string): LibraryFile {
-  const categories = categoryId === undefined ? library.categories : library.categories.filter(category => category.id === categoryId);
-  if (categoryId && !categories.length) throw new Error('The category no longer exists.');
-  return { format: 'ctrlem-db', version: 1, categories: categories.map(({ id, type, name, items, previewsEnabled, purpose }) =>
+export function exportLibrary(library: Library): LibraryFile {
+  return { format: 'ctrlem-db', version: 1, categories: library.categories.map(({ id, type, name, items, previewsEnabled, purpose }) =>
     ({ id, type, name, items: items.map(({ id, value, label }) => ({ id, value, ...(label ? { label } : {}) })), previewsEnabled, ...(purpose ? { purpose } : {}) })) };
 }
 

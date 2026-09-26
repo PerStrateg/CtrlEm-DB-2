@@ -11,7 +11,7 @@ import { providerForType, uploadFileError } from './providers';
 import type { UploadClient } from './extension-upload-client';
 
 type UploadCommand = 'popupImage' | 'changeWallpaper' | 'popupSound' | 'videoOverlay';
-interface UploadJob extends UploadRow { fieldVersion: number; fieldValue: string }
+interface UploadJob extends UploadRow { file?: File; fieldVersion: number; fieldValue: string }
 interface UploadState { key: UploadCommand; field: CommandField; view: FileUploadView; rows: UploadJob[]; fieldVersion: number }
 
 export class UploadController {
@@ -87,6 +87,10 @@ export class UploadController {
             } else this.settings(initiator, () => { void this.refreshSettings(); });
           },
           refresh: () => { void this.refreshSettings(); void this.refreshAccess(); },
+          clearCompleted: () => {
+            const current = this.states.get(field.key)!;
+            current.rows = current.rows.filter(row => row.status !== 'Saved'); this.render();
+          },
         });
         state = { key: field.key as UploadCommand, field, view, rows: [], fieldVersion: 0 };
         this.states.set(field.key, state);
@@ -120,7 +124,7 @@ export class UploadController {
     const provider = providerForType[state.view.type];
     for (const file of files) {
       const error = uploadFileError(provider, state.view.type, file);
-      const row: UploadJob = { id: crypto.randomUUID(), file, provider, categoryId: context.category.id,
+      const row: UploadJob = { id: crypto.randomUUID(), file, fileName: file.name, provider, categoryId: context.category.id,
         categoryName: context.category.name, status: error ? 'Failed' : 'Waiting', error,
         fieldVersion: state.fieldVersion, fieldValue: state.field.input.value };
       state.rows.push(row);
@@ -133,11 +137,12 @@ export class UploadController {
     this.running = true;
     while (this.pending.length && !this.disposed) {
       const { state, row } = this.pending.shift()!;
-      const error = uploadFileError(row.provider, state.view.type, row.file);
+      const error = uploadFileError(row.provider, state.view.type, row.file!);
       if (error) { row.error = error; row.status = 'Failed'; this.render(); continue; }
       row.status = 'Uploading'; row.error = undefined; this.render();
       try {
-        row.url = await this.client.upload(row.provider, state.view.type, row.file, this.abort.signal);
+        row.url = await this.client.upload(row.provider, state.view.type, row.file!, this.abort.signal);
+        delete row.file;
       } catch (error) {
         if (error instanceof UploadError && error.failure.stage === 'access') void this.refreshAccess();
         row.status = 'Failed'; row.error = error instanceof UploadError ? error.message : 'Couldn’t upload. The provider may have received this file. Retry upload if needed.';
@@ -151,7 +156,7 @@ export class UploadController {
     if (!row.url || row.status === 'Saving' || row.status === 'Saved' || this.disposed) return;
     row.status = 'Saving'; row.error = undefined; this.render();
     try {
-      const result = await this.library.addUpload(state.key, { categoryId: row.categoryId, value: row.url, label: row.file.name });
+      const result = await this.library.addUpload(state.key, { categoryId: row.categoryId, value: row.url, label: row.fileName });
       if (this.disposed) return;
       if (result.status === 'missing') {
         row.status = 'Save failed'; row.error = 'Original category was deleted. Copy this URL into another category.';

@@ -2,8 +2,8 @@ import { typeLabels } from '../model/library';
 import type { ImportPlan } from '../model/library-file';
 
 interface TransferActions {
-  export(category: boolean): void;
-  file(file: File, replace: boolean): void;
+  export(): void;
+  file(file: File): void;
   confirm(): void;
   cancel(): void;
   retrySave(): void;
@@ -19,12 +19,10 @@ export class LibraryTransferView {
   constructor(private readonly document: Document, actions: TransferActions) {
     this.element = document.createElement('section'); this.element.className = 'ctrlem-db-transfer';
     this.element.setAttribute('aria-label', 'Import and export');
-    this.element.innerHTML = `<fieldset disabled>
+    this.element.innerHTML = `<h3>Database</h3><p>Back up all categories and entries, or restore them from a file.</p><fieldset disabled>
       <div class="ctrlem-db-actions">
-        <button type="button" data-transfer="category">Export category</button>
-        <button type="button" data-transfer="library">Export library</button>
-        <button type="button" data-transfer="import">Import categories</button>
-        <button type="button" data-transfer="replace">Replace library</button>
+        <button type="button" data-transfer="library">Export DB</button>
+        <button type="button" data-transfer="import">Import DB</button>
       </div>
       <input type="file" accept=".json,application/json" hidden>
       <div class="ctrlem-db-transfer-panel" hidden></div>
@@ -33,16 +31,15 @@ export class LibraryTransferView {
     this.panel = this.element.querySelector('.ctrlem-db-transfer-panel')!;
     this.status = this.element.querySelector('[role=status]')!;
     const file = this.element.querySelector('input')!;
-    let replace = false;
-    for (const action of ['category', 'library', 'import', 'replace']) {
+    for (const action of ['library', 'import']) {
       const button = this.element.querySelector<HTMLButtonElement>(`[data-transfer=${action}]`)!;
       button.addEventListener('click', () => {
         this.initiator = button;
-        if (action === 'category' || action === 'library') actions.export(action === 'category');
-        else { replace = action === 'replace'; file.value = ''; file.click(); }
+        if (action === 'library') actions.export();
+        else { file.value = ''; file.click(); }
       });
     }
-    file.addEventListener('change', () => { if (file.files?.[0]) actions.file(file.files[0], replace); });
+    file.addEventListener('change', () => { if (file.files?.[0]) actions.file(file.files[0]); });
     this.panel.addEventListener('click', event => {
       const action = (event.target as Element).closest<HTMLButtonElement>('button')?.dataset.transfer;
       if (action === 'confirm') actions.confirm();
@@ -51,9 +48,8 @@ export class LibraryTransferView {
       if (action === 'saved') actions.exportSaved();
     });
   }
-  available(enabled: boolean, category: boolean): void {
+  available(enabled: boolean): void {
     this.element.hidden = !enabled;
-    this.element.querySelector<HTMLButtonElement>('[data-transfer=category]')!.disabled = !category;
   }
   busy(busy: boolean): void {
     if (this.controls.disabled === busy) return;
@@ -72,7 +68,7 @@ export class LibraryTransferView {
   private paragraph(text: string): HTMLParagraphElement {
     const p = this.document.createElement('p'); p.textContent = text; return p;
   }
-  preview(plan: ImportPlan, replace: boolean, drafts: boolean): void {
+  preview(plan: ImportPlan, drafts: boolean): void {
     this.panel.replaceChildren(this.paragraph(`${plan.categories.length} categories, ${plan.categories.reduce((count, category) => count + category.items.length, 0)} items`));
     const list = this.document.createElement('ul');
     for (const category of plan.categories) {
@@ -80,9 +76,9 @@ export class LibraryTransferView {
     }
     this.panel.append(list);
     for (const warning of plan.warnings) this.panel.append(this.paragraph(warning));
-    if (replace) this.panel.append(this.paragraph('This replaces all saved categories. Other extension settings are kept.'));
-    if (replace && drafts) this.panel.append(this.paragraph('Unsaved drafts in this tab will be discarded. Drafts in other tabs will remain as conflicts.'));
-    this.panel.append(this.button('confirm', replace ? drafts ? 'Discard drafts and replace' : 'Replace' : 'Import'), this.button('cancel', 'Cancel'));
+    this.panel.append(this.paragraph('This replaces all saved categories. Other extension settings are kept.'));
+    if (drafts) this.panel.append(this.paragraph('Unsaved drafts in this tab will be discarded. Drafts in other tabs will remain as conflicts.'));
+    this.panel.append(this.button('confirm', drafts ? 'Discard drafts and replace' : 'Replace DB'), this.button('cancel', 'Cancel'));
     this.panel.hidden = false;
   }
   unsaved(): void {

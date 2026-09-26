@@ -11,6 +11,7 @@ import { ExtensionUploadClient } from '../upload/extension-upload-client';
 import { AutoSendPage } from '../site/auto-send-page';
 import { AutoSendController } from '../auto-send/auto-send-controller';
 import { ExtensionAutoClient, bindAutoExecutor } from '../auto-send/extension-auto-client';
+import { commands, commandKeys } from '../model/commands';
 import '../site/ctrlem-page.css';
 import '../ui/common.css';
 import '../ui/library.css';
@@ -31,7 +32,7 @@ const shell = new LibraryController(new CtrlEmPage(document), () => editor.flush
 const client = new ExtensionLibraryClient();
 let transfer: TransferController | undefined;
 const editor = new EditorController(shell.content, client, dirty => { shell.setUnsaved(dirty); transfer?.refresh(); });
-transfer = new TransferController(editor.view.element, client, editor);
+transfer = new TransferController(shell.database, client, editor);
 const fields = new CommandFields(document);
 const pickers = new PickerController(fields, client, (type, id, create, initiator) => {
   shell.openFrom(initiator);
@@ -42,7 +43,11 @@ const uploads = new UploadController(fields, client, new ExtensionUploadClient()
   (initiator, back) => shell.openSettings(initiator, back));
 const autoPage = new AutoSendPage(document, fields);
 const unbindAuto = bindAutoExecutor(autoPage);
-const autoSend = new AutoSendController(autoPage, fields, pickers, new ExtensionAutoClient());
+const autoSend = new AutoSendController(autoPage, fields, pickers, new ExtensionAutoClient(), command => {
+  const key = commandKeys.find(key => key === command.key);
+  if (key) { const value = command.fields.find(field => field.id === commands[key].fieldId)?.value;
+    if (value !== undefined) capture.accepted(key, value); }
+});
 runtime.ctrlEmLibraryController = { dispose: () => { autoSend.dispose(); unbindAuto(); uploads.dispose(); capture.dispose(); transfer?.dispose(); pickers.dispose(); editor.dispose(); shell.dispose(); } };
 shell.start();
 editor.start();

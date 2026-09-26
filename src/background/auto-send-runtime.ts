@@ -5,15 +5,16 @@ import { autoSendLimits } from '../model/auto-send';
 import type { AutoOutcome } from '../model/auto-send';
 import { autoRequestSchema } from '../shared/auto-send-protocol';
 import type { AutoPageState, AutoSnapshot } from '../shared/auto-send-protocol';
+import { receiverFromUrl, receiverUrl } from '../model/send-command';
 import { authorizedTab } from './library-service';
 
 const alarmName = 'ctrlem.auto-send.wake';
-const recipient = (url: string) => new URL(url).pathname.split('/')[2]!.toLowerCase();
+const recipient = receiverFromUrl;
 
 export function registerAutoSend(): void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let alarmAt: number | undefined;
-  const tabs = () => chrome.tabs.query({ url: 'https://ctrlem.com/u/*' });
+  const tabs = () => chrome.tabs.query({ url: ['https://ctrlem.com/u/*', 'https://ctrlem.com/groups/*'] });
   const probe = async (tabId: number): Promise<AutoPageState | undefined> => {
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -44,7 +45,7 @@ export function registerAutoSend(): void {
       if (existing?.id !== undefined) {
         await chrome.tabs.update(existing.id, { active: true });
         await chrome.windows.update(existing.windowId, { focused: true });
-      } else await chrome.tabs.create({ url: `https://ctrlem.com/u/${encodeURIComponent(receiver)}` });
+      } else await chrome.tabs.create({ url: receiverUrl(receiver) });
     },
     changed: broadcast,
     wakeAt: time => {

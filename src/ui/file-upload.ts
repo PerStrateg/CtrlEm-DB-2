@@ -2,13 +2,14 @@ import { providers, providerForType, uploadFormats } from '../upload/providers';
 import type { ProviderId, UploadType } from '../upload/providers';
 
 export interface UploadRow {
-  id: string; file: File; provider: ProviderId; categoryId: string; categoryName: string;
+  id: string; fileName: string; provider: ProviderId; categoryId: string; categoryName: string;
   status: 'Waiting' | 'Uploading' | 'Saving' | 'Saved' | 'Failed' | 'Save failed';
   url?: string; error?: string;
 }
 interface UploadActions {
   files(files: File[]): void; retry(id: string): void; save(id: string): void;
   settings(initiator: HTMLElement): void; refresh(): void;
+  clearCompleted(): void;
 }
 
 /** Uses CtrlEm's dropzone classes, without native IDs or upload routing attributes. */
@@ -22,6 +23,7 @@ export class FileUploadView {
   private readonly settings: HTMLButtonElement;
   private readonly refresh: HTMLButtonElement;
   private readonly rows: HTMLElement;
+  private readonly clearCompleted: HTMLButtonElement;
   private readonly rowElements = new Map<string, HTMLElement>();
 
   constructor(private readonly document: Document, readonly type: UploadType, actions: UploadActions) {
@@ -36,7 +38,7 @@ export class FileUploadView {
       <p data-status role="status"></p>
       <button type="button" class="btn btn-secondary" data-settings hidden>Set up provider</button>
       <button type="button" class="btn btn-secondary" data-refresh hidden>Retry loading</button>
-    </div><ul aria-label="Upload results"></ul>`;
+    </div><ul aria-label="Upload results"></ul><button type="button" data-clear-completed hidden>Clear completed</button>`;
     this.zone = this.element.querySelector('.upload-dropzone')!;
     this.files = this.element.querySelector('input')!;
     this.files.accept = uploadFormats[type].accept;
@@ -45,12 +47,16 @@ export class FileUploadView {
     this.browse.setAttribute('aria-label', `Browse ${uploadFormats[type].media} files for ${providers[providerForType[type]].label}`);
     this.element.querySelector('[data-prompt]')!.append(`Drag & drop ${uploadFormats[type].media} or `, this.browse);
     const provider = providers[providerForType[type]];
-    this.element.querySelector('.upload-hint')!.textContent = `${provider.label} · Max ${provider.maxBytes / 1024 / 1024}MB · ${uploadFormats[type].hint}`;
+    const providerName = document.createElement('strong'); providerName.className = 'ctrlem-db-upload-provider';
+    providerName.textContent = provider.label;
+    this.element.querySelector('.upload-hint')!.append(providerName, ` · Max ${provider.maxBytes / 1024 / 1024}MB · ${uploadFormats[type].hint}`);
     this.spinner = this.element.querySelector('.upload-spinner')!;
     this.status = this.element.querySelector('[data-status]')!;
     this.settings = this.element.querySelector('[data-settings]')!;
     this.refresh = this.element.querySelector('[data-refresh]')!;
     this.rows = this.element.querySelector('ul')!;
+    this.clearCompleted = this.element.querySelector('[data-clear-completed]')!;
+    this.clearCompleted.onclick = actions.clearCompleted;
     this.browse.onclick = () => this.files.click();
     this.files.onchange = () => { actions.files(Array.from(this.files.files ?? [])); this.files.value = ''; };
     for (const name of ['dragover', 'dragenter']) this.zone.addEventListener(name, event => {
@@ -86,6 +92,9 @@ export class FileUploadView {
     this.status.hidden = !message;
     this.spinner.hidden = !rows.some(row => row.categoryId === categoryId && row.status === 'Uploading');
     this.rows.hidden = !rows.length;
+    this.clearCompleted.hidden = !rows.some(row => row.status === 'Saved');
+    const ids = new Set(rows.map(row => row.id));
+    for (const [id, element] of this.rowElements) if (!ids.has(id)) { element.remove(); this.rowElements.delete(id); }
     for (const row of rows) {
       let item = this.rowElements.get(row.id);
       if (!item) {
@@ -97,7 +106,7 @@ export class FileUploadView {
         const save = this.document.createElement('button'); save.type = 'button'; save.className = 'btn btn-secondary'; save.dataset.action = 'save'; save.dataset.id = row.id; save.textContent = 'Retry save';
         item.append(caption, result, retry, save); this.rows.append(item); this.rowElements.set(row.id, item);
       }
-      const text = `${row.file.name} · ${row.categoryName} · ${row.status}${row.error ? ` · ${row.error}` : ''}`;
+      const text = `${row.fileName} · ${row.categoryName} · ${row.status}${row.error ? ` · ${row.error}` : ''}`;
       if (item.querySelector('p')!.textContent !== text) item.querySelector('p')!.textContent = text;
       const result = item.querySelector('input')!; result.hidden = !row.url || row.status === 'Saved';
       if (result.value !== (row.url ?? '')) result.value = row.url ?? '';

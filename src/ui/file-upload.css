@@ -16,6 +16,8 @@
 .ctrlem-db-upload .upload-dropzone.drag-active { border-color: var(--upload-accent); border-style: dashed; }
 .ctrlem-db-upload .upload-dropzone > svg,
 .ctrlem-db-upload .upload-browse-label { color: var(--upload-accent); }
+.ctrlem-db-upload .ctrlem-db-upload-provider { color: var(--upload-accent); font-weight: 600; }
+.ctrlem-db-native-provider { color: var(--accent-primary); font-weight: 600; }
 
 .ctrlem-db-upload .upload-dropzone:hover,
 .ctrlem-db-upload .upload-dropzone.drag-active { background: color-mix(in srgb, var(--upload-accent) 10%, var(--bg-tertiary)); }

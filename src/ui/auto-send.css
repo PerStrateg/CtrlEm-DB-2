@@ -1,22 +1,28 @@
 .ctrlem-db-send-row { display: grid; grid-template-columns: minmax(0, 1fr) 64px 36px; align-items: center; gap: 6px; min-width: 0; }
 .ctrlem-db-auto-control { display: contents; }
-.ctrlem-db-send-row > button[data-send], .ctrlem-db-auto-control > :is(input, button) { height: 36px; min-height: 36px; margin: 0; box-sizing: border-box; min-width: 0; width: 100%; padding: 0 8px; }
+.ctrlem-db-send-row > .ctrlem-db-queued-send, .ctrlem-db-auto-control > :is(input, button) { height: 36px; min-height: 36px; margin: 0; box-sizing: border-box; min-width: 0; width: 100%; padding: 0 8px; }
 .ctrlem-db-auto-control input { text-align: center; padding: 0 3px; }
 .ctrlem-db-auto-control .ctrlem-db-auto-toggle { padding: 0; font-weight: 600; }
 .ctrlem-db-auto-toggle[aria-pressed='true'] { background: var(--accent-primary); color: var(--text-primary); }
 .ctrlem-db-auto-toggle[aria-busy='true'] { cursor: progress; }
-.ctrlem-db-auto-panel { position: fixed; right: 16px; bottom: 16px; width: min(320px, calc(100vw - 32px)); max-height: 35vh; z-index: 999; display: flex; flex-direction: column; box-sizing: border-box; border: 1px solid var(--border-color); border-radius: var(--border-radius); background: var(--bg-secondary); box-shadow: var(--shadow-lg); overflow: hidden; }
+.ctrlem-db-auto-panel { position: fixed; right: 16px; bottom: 16px; width: min(600px, calc(100% - 32px)); max-height: 35vh; z-index: 999; display: flex; flex-direction: column; box-sizing: border-box; border: 1px solid var(--border-color); border-radius: 12px; background: var(--bg-secondary); box-shadow: var(--shadow-lg); overflow: hidden; }
 .ctrlem-db-auto-panel header { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 8px 10px; }
 .ctrlem-db-auto-panel header strong { flex: 1; min-width: 0; font-size: .8rem; }
 .ctrlem-db-auto-panel button { min-height: 28px; padding: 3px 7px; font-size: .75rem; white-space: nowrap; }
-.ctrlem-db-auto-panel .ctrlem-db-auto-collapse { width: 28px; padding: 0; font-size: 18px; }
-.ctrlem-db-auto-tasks { min-height: 0; overflow-y: auto; padding: 0 10px; }
-.ctrlem-db-auto-tasks article { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; column-gap: 8px; padding: 10px 0; border-top: 1px solid var(--border-color); }
-.ctrlem-db-auto-task-content { min-width: 0; }
-.ctrlem-db-auto-task-content strong { display: block; font-size: .8rem; }
-.ctrlem-db-auto-task-content :is(strong, p:first-of-type) { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.ctrlem-db-auto-task-content p { margin: 3px 0 0; color: var(--text-secondary); font-size: .75rem; overflow-wrap: anywhere; }
-.ctrlem-db-auto-task-actions { display: flex; flex-direction: column; gap: 4px; }
-.ctrlem-db-auto-tasks [data-status='paused'] .ctrlem-db-auto-task-content p:last-child { color: var(--warning); }
+.ctrlem-db-auto-panel .ctrlem-db-auto-collapse { width: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-color: transparent; background: transparent; }
+.ctrlem-db-auto-collapse[aria-expanded='false'] svg { transform: rotate(180deg); }
+.ctrlem-db-auto-panel button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.ctrlem-db-auto-tasks { min-height: 0; overflow: auto; padding: 0 12px; }
+.ctrlem-db-auto-tasks article { display: grid; grid-template-columns: 78px minmax(100px, 1fr) 110px 174px; min-width: 510px; align-items: center; column-gap: 8px; padding: 7px 0; border-top: 1px solid var(--border-color); font-size: .75rem; }
+.ctrlem-db-auto-tasks article > :is(strong, span) { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ctrlem-db-task-receiver { color: var(--text-secondary); font-weight: 500; }
+.ctrlem-db-task-command { font-weight: 600; }
+.ctrlem-db-task-status { font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.ctrlem-db-auto-task-actions { display: flex; justify-content: flex-end; align-items: center; gap: 4px; }
+.ctrlem-db-auto-panel .ctrlem-db-task-info { width: 26px; padding: 0; border-color: transparent; border-radius: 50%; color: var(--text-secondary); }
+.ctrlem-db-task-details { max-width: min(420px, calc(100vw - 48px)); padding: 14px 18px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-secondary); color: var(--text-primary); box-shadow: var(--shadow-lg); font-size: .85rem; overflow-wrap: anywhere; }
+.ctrlem-db-auto-tasks [data-status='paused'] .ctrlem-db-task-status { color: var(--warning); }
 .ctrlem-db-auto-notice { padding: 0 10px 10px; overflow-y: auto; }
 .ctrlem-db-auto-notice p { margin: 0 0 6px; }
+
+.ctrlem-db-native-send { display: none !important; }

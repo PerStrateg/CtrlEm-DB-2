@@ -1,27 +1,37 @@
 import { autoCommandKeys, autoSendLimits } from '../model/auto-send';
 import type { AutoCommandKey, AutoExecution, AutoOutcome } from '../model/auto-send';
-import type { AutoPageState } from '../shared/auto-send-protocol';
+import type { AutoPageState, AutoSnapshot } from '../shared/auto-send-protocol';
 import { CommandFields } from './command-fields';
+import { NativeSend } from './native-send';
+import { receiverFromUrl } from '../model/send-command';
+import { commandAcknowledged, commandRejection } from './send-result';
 
 /** Native sends and their DOM acknowledgement; never calls the site's command API. */
 export class AutoSendPage {
   private readonly attempts = new Map<string, Promise<AutoOutcome>>();
+  private readonly attemptTimers = new Map<string, number>();
   private cancel?: () => void;
+  readonly native: NativeSend;
+  private waiting?: { token: string; cancel: () => void };
+  synchronize(snapshot: AutoSnapshot | undefined): void {
+    if (this.waiting && ![...(snapshot?.tasks ?? []), ...(snapshot?.sends ?? [])].some(task => task.status === 'running' && task.execution?.token === this.waiting!.token)) {
+      this.waiting.cancel();
+    }
+  }
   private readonly controls = new Map<AutoCommandKey, { button: HTMLButtonElement; row: HTMLElement; anchor: Comment }>();
   private panel?: HTMLElement;
   private panelResize?: ResizeObserver;
   private toasts?: HTMLElement;
   private previousToastHeight = '';
   private previousToastPriority = '';
-  constructor(readonly document: Document, private readonly fields: CommandFields) {}
+  constructor(readonly document: Document, private readonly fields: CommandFields) { this.native = new NativeSend(document); }
 
-  receiver(): string { return /^\/u\/([^/]+)\/?$/.exec(this.document.location.pathname)?.[1]?.toLowerCase() ?? ''; }
-  button(key: AutoCommandKey): HTMLButtonElement | null {
-    return this.document.querySelector<HTMLButtonElement>(`.panel--commands button[data-send="${key}"]`);
-  }
+  receiver(): string { return receiverFromUrl(this.document.location.href); }
+  button(key: string): HTMLButtonElement | null { return this.native.button(key) ?? null; }
   state(): AutoPageState {
     const fields = this.fields.find();
-    return { receiver: this.receiver(), commands: autoCommandKeys.filter(key => this.button(key) &&
+    return { receiver: this.receiver(), nativeCommands: [...this.native.buttons().keys()],
+      readyCommands: [...this.native.buttons().keys()].filter(key => this.native.ready(key)), commands: autoCommandKeys.filter(key => this.button(key) &&
       (key === 'sendOrDelete' || fields.some(field => field.key === key))),
     galleries: { popupImage: this.fields.gallery('popupImage').items, changeWallpaper: this.fields.gallery('changeWallpaper').items } };
   }
@@ -35,9 +45,9 @@ export class AutoSendPage {
     return () => this.document.removeEventListener('click', listener, true);
   }
   mountControl(key: AutoCommandKey, control: HTMLElement): void {
-    const button = this.button(key);
+    const button = this.native.visible(key);
     const current = this.controls.get(key);
-    if (current?.button === button && current.row.contains(button)) return;
+    if (current && button && current.button === button && current.row.contains(button)) return;
     this.unmountControl(key);
     if (!button) return;
     const anchor = this.document.createComment('CtrlEm DB Send position');
@@ -85,39 +95,50 @@ export class AutoSendPage {
   }
   restoreLayout(): void {
     for (const key of this.controls.keys()) this.unmountControl(key);
-    this.panelResize?.disconnect(); this.panel = undefined; this.restoreToasts();
+    this.panelResize?.disconnect(); this.panel = undefined; this.restoreToasts(); this.native.dispose();
   }
   execute(execution: AutoExecution): Promise<AutoOutcome> {
+    if (Date.now() >= execution.deadline) return Promise.resolve({ status: 'paused', reason: 'unknown' });
     const previous = this.attempts.get(execution.token);
     if (previous) return previous;
     const attempt = this.perform(execution);
     this.attempts.set(execution.token, attempt);
+    this.attemptTimers.set(execution.token, this.document.defaultView!.setTimeout(() => {
+      this.attempts.delete(execution.token); this.attemptTimers.delete(execution.token);
+    }, execution.deadline - Date.now()));
     return attempt;
   }
   private perform(execution: AutoExecution): Promise<AutoOutcome> {
     const button = this.button(execution.command), receiver = this.receiver();
     const input = this.fields.find().find(field => field.key === execution.command);
     if (execution.receiver !== receiver || !receiver || !button ||
-      (execution.command !== 'sendOrDelete' && (!input || execution.value === undefined))) {
+      (!execution.parameters && execution.command !== 'sendOrDelete' && (!input || execution.value === undefined))) {
       return Promise.resolve({ status: 'paused', reason: 'unavailable' });
     }
     if (Date.now() >= execution.deadline || this.cancel) return Promise.resolve({ status: 'paused', reason: 'unknown' });
-    if (button.disabled) return Promise.resolve({ status: 'paused', reason: 'busy' });
+    if (!this.native.ready(execution.command)) return Promise.resolve({ status: 'paused', reason: 'busy' });
     const toasts = this.document.getElementById('toast-container');
     if (!toasts) return Promise.resolve({ status: 'paused', reason: 'unavailable' });
-    if (input) this.fields.fill(input, { id: execution.token, value: execution.value! }, false);
+    const session = this.document.getElementById('profile-session-panel');
+    const previousSession = session?.dataset.sessionId;
+    const errorElement = this.document.getElementById(`${execution.command}-error`);
+    const previousError = errorElement?.textContent;
 
     return new Promise(resolve => {
       const window = this.document.defaultView!;
-      let ownClick = false, finished = false;
+      let ownClick = false, finished = false, clicked = false;
       const finish = (outcome: AutoOutcome) => {
         if (finished) return;
         finished = true; observer.disconnect(); window.clearTimeout(timer);
         this.document.removeEventListener('click', otherSend, true);
         window.removeEventListener('pagehide', detached);
-        this.cancel = undefined; resolve(outcome);
+        this.cancel = undefined; this.waiting = undefined; resolve(outcome);
       };
-      const detached = () => finish({ status: 'paused', reason: 'interrupted' });
+      const detached = () => finish({ status: 'paused', reason: clicked ? 'unknown' : 'interrupted' });
+      const rejected = (message: string, inline = false) => {
+        const outcome = commandRejection(execution.command, message, inline);
+        if (outcome) finish(outcome);
+      };
       const otherSend = (event: MouseEvent) => {
         if (ownClick || !(event.target instanceof window.Element)) return;
         const other = event.target.closest<HTMLButtonElement>('[data-send], [data-send-plugin]');
@@ -125,20 +146,45 @@ export class AutoSendPage {
       };
       const observer = new window.MutationObserver(records => {
         if (this.receiver() !== receiver || !button.isConnected || !toasts.isConnected) return detached();
+        if (!clicked) { sendWhenReady(); return; }
+        if (execution.command === 'session' && session?.dataset.sessionId && session.dataset.sessionId !== previousSession && session.style.display === 'block') return finish({ status: 'success' });
+        if (errorElement?.textContent?.trim() && (errorElement.textContent !== previousError ||
+          records.some(record => record.target === errorElement || errorElement.contains(record.target)))) return rejected(errorElement.textContent.trim(), true);
         for (const record of records) for (const node of record.addedNodes) {
           if (!(node instanceof window.Element) || node.parentElement !== toasts) continue;
-          if (node.matches('.toast.success') && node.textContent?.trim() === 'Command sent') return finish({ status: 'success' });
-          if (node.matches('.toast.error')) return finish({ status: 'paused', reason: 'failed' });
+          if (node.matches('.toast.success') && commandAcknowledged(execution.command, node.textContent?.trim() ?? '', receiver.startsWith('group:'))) return finish({ status: 'success' });
+          if (node.matches('.toast.error')) {
+            rejected(node.textContent?.trim() ?? '');
+            if (finished) return;
+          }
         }
       });
-      const timer = window.setTimeout(() => finish({ status: 'paused', reason: 'unknown' }),
+      const sendWhenReady = () => {
+        if (finished || clicked) return;
+        if (Date.now() >= execution.deadline) { finish({ status: 'paused', reason: 'busy' }); return; }
+        if (button.disabled) return;
+        this.waiting = undefined;
+        clicked = true;
+        ownClick = true;
+        try {
+          this.native.click(execution.parameters ?? this.native.capture(execution.command, false),
+            input && execution.value !== undefined ? { id: input.input.id, value: execution.value } : undefined);
+        } catch { finish({ status: 'paused', reason: 'unavailable' }); }
+        finally { ownClick = false; }
+      };
+      const timer = window.setTimeout(() => finish({ status: 'paused', reason: clicked ? 'unknown' : 'busy' }),
         Math.min(autoSendLimits.resultTimeoutMs, execution.deadline - Date.now()));
       this.cancel = detached;
-      observer.observe(this.document, { childList: true, subtree: true });
+      this.waiting = { token: execution.token, cancel: detached };
+      observer.observe(this.document, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'style', 'data-session-id'] });
       this.document.addEventListener('click', otherSend, true);
       window.addEventListener('pagehide', detached);
-      ownClick = true; button.click(); ownClick = false;
+      sendWhenReady();
     });
   }
-  dispose(): void { this.cancel?.(); }
+  dispose(): void {
+    this.cancel?.();
+    for (const timer of this.attemptTimers.values()) this.document.defaultView!.clearTimeout(timer);
+    this.attemptTimers.clear(); this.attempts.clear();
+  }
 }

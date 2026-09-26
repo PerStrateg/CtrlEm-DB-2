@@ -67,3 +67,6 @@
 .ctrlem-db-library nav { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 20px; }
 .ctrlem-db-library nav button { padding: 6px 12px; }
 .ctrlem-db-settings iframe { display: block; width: 100%; height: 560px; border: 0; }
+.ctrlem-db-database { padding: 0 20px 16px; border-bottom: 1px solid var(--border-color); }
+.ctrlem-db-database h3 { margin: 8px 0; font-size: 1rem; }
+.ctrlem-db-database p { color: var(--text-secondary); font-size: .85rem; }
