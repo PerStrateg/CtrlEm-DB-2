@@ -11,7 +11,7 @@
 .ctrlem-db-files-count { margin-left: auto; font-size: .85rem; color: var(--text-secondary); }
 .ctrlem-db-files-status, .ctrlem-db-files-confirm { margin: 4px 10px; font-size: .85rem; overflow-wrap: anywhere; }
 .ctrlem-db-files-status { flex-shrink: 0; padding: 6px 0; }
-.ctrlem-db-files-empty { margin: 12px 24px; max-width: 48ch; color: var(--text-secondary); font-size: .8rem; line-height: 1.4; }
+.ctrlem-db-files-empty { margin: 12px 24px; align-self: center; text-align: center; color: var(--text-secondary); font-size: .8rem; line-height: 1.4; }
 .ctrlem-db-files [hidden] { display: none !important; }
 .ctrlem-db-files-grid { overflow: auto; flex: 1; min-height: 0; padding: 8px; }
 .ctrlem-db-files-canvas { position: relative; }
