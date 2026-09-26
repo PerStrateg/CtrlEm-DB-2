@@ -1,3 +1,4 @@
+import { createInfoButton } from './info-tip';
 import { autoCommandLabel, autoSendLimits, pauseReasons, orderedQueue, projectedSendTimes, isManualSend, sendFailureMessages } from '../model/auto-send';
 import { sendQueueLimits } from '../model/send-command';
 import type { AutoCommandKey, AutoTask } from '../model/auto-send';
@@ -52,7 +53,10 @@ export class AutoSendControl {
     this.interval.title = `Auto-send interval in seconds (${autoSendLimits.minSeconds}–${autoSendLimits.maxSeconds})`;
     this.toggle = button(document, 'A', actions.toggle);
     this.toggle.className = 'ctrlem-db-auto-toggle';
-    this.element.append(this.interval, this.toggle);
+    const info = createInfoButton(document, 'About auto-send', key === 'sendOrDelete'
+      ? 'A repeats this command. The number is seconds between sends. Press A again to stop.'
+      : 'A sends items from this category in order. The number is seconds between sends. Press A again to stop.');
+    this.element.append(this.interval, this.toggle, info);
     const status = document.createElement('div'); status.className = 'ctrlem-db-interval-status'; status.hidden = true;
     this.preferenceMessage = document.createElement('span'); this.preferenceMessage.setAttribute('role', 'status');
     this.preferenceRetry = button(document, 'Retry', () => {}); this.preferenceRetry.hidden = true;
@@ -80,7 +84,7 @@ export class AutoSendControl {
     if (task && this.interval.value !== String(task.intervalSeconds)) this.interval.value = String(task.intervalSeconds);
   }
 }
-interface TaskRow { element: HTMLElement; title: HTMLElement; source: HTMLElement; status: HTMLElement; details: HTMLElement; info: HTMLButtonElement; stop: HTMLButtonElement; resume: HTMLButtonElement; open: HTMLButtonElement }
+interface TaskRow { element: HTMLElement; title: HTMLElement; source: HTMLElement; status: HTMLElement; info: HTMLButtonElement; stop: HTMLButtonElement; resume: HTMLButtonElement; open: HTMLButtonElement }
 export class AutoTaskPanel {
   readonly element: HTMLElement;
   private readonly heading: HTMLElement;
@@ -146,26 +150,23 @@ export class AutoTaskPanel {
       if (!row) {
         const element = this.document.createElement('article'), title = this.document.createElement('strong');
         const source = this.document.createElement('span'), status = this.document.createElement('span');
-        const details = this.document.createElement('div'); details.className = 'ctrlem-db-task-details';
-        details.id = `ctrlem-db-task-details-${task.id}`; details.setAttribute('popover', 'auto');
-        const info = button(this.document, 'i', () => {});
-        info.className = 'ctrlem-db-task-info'; info.setAttribute('popovertarget', details.id);
-        info.setAttribute('aria-label', `Details for ${task.label} to ${receiverLabel(task.receiver)}`);
+        const info = createInfoButton(this.document, `Details for ${task.label} to ${receiverLabel(task.receiver)}`, '');
+        info.classList.add('ctrlem-db-task-info');
         const stop = button(this.document, 'Stop', () => this.actions.stop(task.id));
         const resume = button(this.document, 'Resume', () => this.actions.resume(task.id));
         const open = button(this.document, 'Open page', () => this.actions.open(task.id));
         title.className = 'ctrlem-db-task-receiver'; source.className = 'ctrlem-db-task-command'; status.className = 'ctrlem-db-task-status';
         const actions = this.document.createElement('div'); actions.className = 'ctrlem-db-auto-task-actions';
         actions.append(info, stop, resume, open);
-        element.append(title, source, status, actions, details); this.list.append(element);
-        row = { element, title, source, status, details, info, stop, resume, open }; this.rows.set(task.id, row);
+        element.append(title, source, status, actions); this.list.append(element);
+        row = { element, title, source, status, info, stop, resume, open }; this.rows.set(task.id, row);
       }
       text(row.title, receiverLabel(task.receiver));
       attribute(row.title, 'title', row.title.textContent!);
       text(row.source, task.label);
       attribute(row.source, 'title', task.source);
       const details = [task.source, taskDetails(task)].filter(Boolean).join(' · ');
-      text(row.details, details);
+      attribute(row.info, 'data-info', details);
       attribute(row.element, 'data-status', task.status);
       text(row.status, pending.get(task.id) ?? (!connected ? '—' : task.status === 'paused' ? 'Paused' :
         task.status === 'stopping' ? 'Stopping…' : task.preparation ? 'Preparing…' : task.status === 'running' ? 'Sending…' :
@@ -182,8 +183,9 @@ export class AutoTaskPanel {
     }
     for (const [id, notice] of this.notices) if (!snapshot.notices.some(item => item.id === id)) { notice.remove(); this.notices.delete(id); }
     for (const item of snapshot.notices) if (!this.notices.has(item.id)) {
-      const notice = this.document.createElement('p'); notice.className = 'ctrlem-db-queue-result';
-      notice.append(`${receiverLabel(item.receiver)} · ${item.label}: ${item.message} `,
+      const notice = this.document.createElement('div'); notice.className = 'ctrlem-db-queue-result';
+      const copy = this.document.createElement('p'); copy.textContent = `${receiverLabel(item.receiver)} · ${item.label}: ${item.message}`;
+      notice.append(copy,
         button(this.document, 'Dismiss', () => this.actions.dismiss?.(item.id)));
       this.notices.set(item.id, notice); this.element.append(notice);
     }

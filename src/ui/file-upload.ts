@@ -1,3 +1,4 @@
+import { createInfoButton } from './info-tip';
 import { providers, providerForType, uploadFormats } from '../upload/providers';
 import type { ProviderId, UploadType } from '../upload/providers';
 
@@ -51,6 +52,7 @@ export class FileUploadView {
     const providerName = document.createElement('strong'); providerName.className = 'ctrlem-db-upload-provider';
     providerName.textContent = provider.label;
     this.element.querySelector('.upload-hint')!.append(providerName, ` · Max ${provider.maxBytes / 1024 / 1024}MB · ${uploadFormats[type].hint}`);
+    this.element.querySelector('.upload-hint')!.append(createInfoButton(document, 'About uploads', 'Uploaded files are added to the selected category. Removing a result here does not delete the file from the upload service.'));
     this.spinner = this.element.querySelector('.upload-spinner')!;
     this.status = this.element.querySelector('[data-status]')!;
     this.settings = this.element.querySelector('[data-settings]')!;

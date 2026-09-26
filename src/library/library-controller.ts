@@ -1,3 +1,4 @@
+import type { ContentType } from '../model/library';
 import { CtrlEmPage } from '../site/ctrlem-page';
 import type { ResultsMount } from '../site/ctrlem-page';
 import { LibraryLauncher } from '../ui/library-launcher';
@@ -29,6 +30,8 @@ export class LibraryController {
     });
   }
 
+  bindTypeSelection(select: (type: ContentType) => void): void { this.shell.onSelectType = select; }
+  setActiveType(type: ContentType): void { this.shell.setActiveType(type); }
   get content(): HTMLElement { return this.shell.content; }
   get database(): HTMLElement { return this.shell.database; }
 
@@ -119,5 +122,6 @@ export class LibraryController {
     this.unmountLauncher?.();
     this.resultsMount?.dispose();
     this.launcher.dispose();
+    this.shell.dispose();
   }
 }

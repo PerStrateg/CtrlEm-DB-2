@@ -55,8 +55,11 @@ export class FilesPanel {
     bar.append(clear, this.count, button('Close', actions.close));
     sendBar.append(this.send, seconds, this.auto, previewLabel);
     this.confirmation = doc.createElement('div'); this.confirmation.className = 'ctrlem-db-files-confirm'; this.confirmation.hidden = true;
-    this.confirmation.append('Clear local files and cancel Files tasks? CtrlEm uploads will remain. ',
+    const confirmationText = doc.createElement('p'); confirmationText.textContent = 'Clear local files and cancel Files tasks? CtrlEm uploads will remain.';
+    const confirmationActions = doc.createElement('div'); confirmationActions.className = 'ctrlem-db-actions';
+    confirmationActions.append(
       button('Clear files', () => { this.confirmation.hidden = true; actions.clear(); }), button('Cancel', () => { this.confirmation.hidden = true; clear.focus(); }));
+    this.confirmation.append(confirmationText, confirmationActions);
     this.status = doc.createElement('p'); this.status.className = 'ctrlem-db-files-status'; this.status.setAttribute('role', 'status'); this.status.hidden = true;
     this.empty = doc.createElement('p'); this.empty.className = 'ctrlem-db-files-empty';
     this.empty.textContent = 'Click Add files/folder. JPG, PNG, GIF, WebP. Large files resize automatically.';

@@ -20,7 +20,7 @@ export class LibraryTransferView {
   constructor(private readonly document: Document, actions: TransferActions) {
     this.element = document.createElement('section'); this.element.className = 'ctrlem-db-transfer';
     this.element.setAttribute('aria-label', 'Import and export');
-    this.element.innerHTML = `<h3>Database</h3><p>Back up all categories and entries, or restore them from a file.</p><fieldset disabled>
+    this.element.innerHTML = `<h3>Library backups</h3><p>Back up all categories and entries, or restore them from a file.</p><fieldset disabled>
       <div class="ctrlem-db-actions">
         <button type="button" data-transfer="library">Export DB</button>
         <button type="button" data-transfer="import">Import DB</button>

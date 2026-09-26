@@ -6,8 +6,10 @@ export interface CredentialsClient {
   save(field: CredentialId, value: string): Promise<void>;
 }
 
-export async function mountSettings(document: Document, client: CredentialsClient): Promise<void> {
-  const root = document.querySelector('main')!;
+export async function mountSettings(
+  document: Document, client: CredentialsClient, root: HTMLElement = document.querySelector('main')!,
+  onProvider?: (id: CredentialId, section: HTMLElement) => void,
+): Promise<void> {
   const loading = document.createElement('p');
   loading.setAttribute('role', 'status');
   loading.textContent = 'Loading settings…';
@@ -18,13 +20,13 @@ export async function mountSettings(document: Document, client: CredentialsClien
     loading.textContent = 'Couldn’t load settings. Retry to keep your saved values.';
     const retry = document.createElement('button');
     retry.textContent = 'Retry';
-    retry.onclick = () => { loading.remove(); retry.remove(); void mountSettings(document, client); };
+    retry.onclick = () => { loading.remove(); retry.remove(); void mountSettings(document, client, root, onProvider); };
     root.append(retry);
     return;
   }
   loading.remove();
   for (const field of credentialFields) {
-    const section = document.createElement('section');
+    const section = document.createElement('section'); section.className = 'ctrlem-db-provider-settings'; section.dataset.providerSettings = field.id;
     const label = document.createElement('label');
     label.htmlFor = field.id;
     label.textContent = field.label;
@@ -70,7 +72,9 @@ export async function mountSettings(document: Document, client: CredentialsClien
       }
     };
     input.oninput = () => { revision++; void save(); };
-    section.append(label, help, input, show);
+    const fieldRow = document.createElement('div'); fieldRow.className = 'ctrlem-db-credential-row'; fieldRow.append(input, show);
+    section.append(label, help, fieldRow);
     root.append(section);
+    onProvider?.(field.id, section);
   }
 }

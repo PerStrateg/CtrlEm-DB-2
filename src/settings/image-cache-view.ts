@@ -1,18 +1,19 @@
+import { createInfoButton } from '../ui/info-tip';
 import { imageCacheAccess, imageCacheLimits } from '../shared/image-cache-protocol';
 import type { ImageCacheSettingsRequest, ImageCacheStatus } from '../shared/image-cache-protocol';
 import type { Reply } from '../shared/library-protocol';
 
-export function mountImageCacheSettings(document: Document): void {
+export function mountImageCacheSettings(document: Document, root: HTMLElement = document.querySelector('main')!): void {
   const section = document.createElement('section');
-  section.innerHTML = `<h2>Image cache</h2>
-    <p>Keep viewed images on this device. Images stay cached until you clear them or the cache fills up.</p>
+  section.innerHTML = `<div class="ctrlem-db-field-heading"><h2>Image storage</h2></div>
     <p data-cache-access role="status"></p>
     <button type="button" data-cache-enable>Enable image caching</button>
     <label>Cache limit <select aria-label="Image cache limit"></select></label>
     <p data-cache-usage></p>
-    <button type="button" data-cache-clear>Clear cache</button>
-    <button type="button" data-cache-refresh>Refresh cache status</button>
+    <div class="ctrlem-db-actions"><button type="button" data-cache-clear>Clear cache</button>
+    <button type="button" data-cache-refresh>Refresh cache status</button></div>
     <p data-cache-status role="status"></p>`;
+  section.querySelector('.ctrlem-db-field-heading')!.append(createInfoButton(document, 'About image storage', 'Keeps copies on this device so images load faster next time. Older copies are removed when storage fills up.'));
   const select = section.querySelector('select')!;
   for (const mib of imageCacheLimits) {
     const option = document.createElement('option'); option.value = String(mib * 1024 ** 2);
@@ -33,7 +34,7 @@ export function mountImageCacheSettings(document: Document): void {
       const value = reply.value;
       select.value = String(value.limit);
       usage.textContent = `${(value.bytes / 1024 ** 2).toFixed(1)} MiB used · ${value.count} images`;
-      access.textContent = value.access ? 'Access enabled for image hosts.' : 'Allow access to image hosts to keep a persistent cache. Images still display without it.';
+      access.textContent = value.access ? '' : 'Allow access to image hosts to keep a persistent cache. Images still display without it.';
       enable.hidden = value.access;
       status.textContent = message.type === 'image-cache:clear' ? 'Cache cleared. Visible images will load again.' : '';
       busy(false);
@@ -50,12 +51,12 @@ export function mountImageCacheSettings(document: Document): void {
     busy(true);
     void permission.then(async granted => {
       await update({ type: 'image-cache:status' });
-      if (!granted) status.textContent = 'Access was not granted. Images will display without persistent caching.';
+      status.textContent = granted ? 'Image caching enabled.' : 'Access was not granted. Images will display without persistent caching.';
     }, () => { busy(false); status.textContent = 'Couldn’t request access. Try again.'; });
   };
   select.onchange = () => { void update({ type: 'image-cache:limit', bytes: Number(select.value) }); };
   clear.onclick = () => { void update({ type: 'image-cache:clear' }); };
   refresh.onclick = () => { void update({ type: 'image-cache:status' }); };
-  document.querySelector('main')!.append(section);
+  root.append(section);
   void update({ type: 'image-cache:status' });
 }

@@ -30,10 +30,10 @@ export class EditorController {
   private transferLocked = false;
   private pendingOpen?: { type: ContentType; id?: string; create: boolean };
 
-  constructor(container: HTMLElement, private readonly client: LibraryClient, private readonly onDirty: (dirty: boolean) => void) {
+  constructor(container: HTMLElement, private readonly client: LibraryClient, private readonly onDirty: (dirty: boolean) => void, private readonly onType: (type: ContentType) => void = () => {}) {
     this.view = new LibraryEditorView(container.ownerDocument, {
       retryLoad: () => { void this.load(); },
-      selectType: type => this.selectType(type), selectCategory: id => this.selectCategory(id),
+      selectCategory: id => this.selectCategory(id),
       create: name => this.create(name), name: value => this.editName(value), rename: () => this.rename(),
       text: value => this.editText(value), previews: value => this.editPreviews(value),
       position: (start, end, scroll) => this.position(start, end, scroll),
@@ -134,6 +134,7 @@ export class EditorController {
         categories.push({ id: state.data.id, name: state.data.name, count: 0, deleted: true });
       }
     }
+    this.onType(this.session.activeType);
     this.view.render({ loading: this.loading, error: this.error, type: this.session.activeType, categories,
       draft: active?.data, status: active?.status ?? '', nameError: active?.nameError, invalidLines: active?.invalidLines ?? [],
       conflict: active?.conflict ?? false, canOverwrite: this.library.categories.some(item => item.id === active?.data.id),
@@ -152,7 +153,7 @@ export class EditorController {
     });
   }
 
-  private selectType(type: ContentType): void {
+  selectType(type: ContentType): void {
     this.flushActive(); this.session.activeType = type; this.ensureSelected(); this.persistSession(); this.render();
   }
   openCategory(type: ContentType, id?: string, create = false): void {

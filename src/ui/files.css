@@ -2,14 +2,14 @@
 .ctrlem-db-image-heading > [data-acc] { flex: 1; min-width: 0; }
 .ctrlem-db-files-open > :not(.ctrlem-db-files) { display: none !important; }
 .ctrlem-db-files { display: flex; flex-direction: column; min-width: 0; height: var(--ctrlem-db-files-height); }
-.ctrlem-db-files-bar { display: flex; gap: 8px; padding: 8px 10px; align-items: center; flex-wrap: wrap; }
+.ctrlem-db-files-bar { display: flex; gap: 8px; padding: 12px 16px; align-items: center; flex-wrap: wrap; }
 .ctrlem-db-files-send-bar { padding-top: 0; }
 .ctrlem-db-files-send-bar > label:last-child { margin-left: auto; }
-.ctrlem-db-files-bar label { display: inline-flex; align-items: center; gap: 5px; }
-.ctrlem-db-files-bar input[type=number] { width: 65px; }
+.ctrlem-db-files-bar label { display: inline-flex; align-items: center; gap: 8px; }
+.ctrlem-db-files-bar input[type=number] { width: 48px; padding-left: 4px; padding-right: 4px; text-align: center; }
 .ctrlem-db-files-bar input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent-primary); }
 .ctrlem-db-files-count { margin-left: auto; font-size: .85rem; color: var(--text-secondary); }
-.ctrlem-db-files-status, .ctrlem-db-files-confirm { margin: 4px 10px; font-size: .85rem; overflow-wrap: anywhere; }
+.ctrlem-db-files-status, .ctrlem-db-files-confirm { margin: 8px 16px; font-size: .85rem; overflow-wrap: anywhere; }
 .ctrlem-db-files-status { flex-shrink: 0; padding: 6px 0; }
 .ctrlem-db-files-empty { margin: 12px 24px; align-self: center; text-align: center; color: var(--text-secondary); font-size: .8rem; line-height: 1.4; }
 .ctrlem-db-files [hidden] { display: none !important; }

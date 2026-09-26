@@ -156,12 +156,13 @@ export class PickerController implements AutoPickerSource {
     const type = commands[state.field.key].type;
     const categories = this.library.categories.filter(category => category.type === type)
       .map(category => ({ id: category.id, name: category.name, count: category.items.length }));
-    if (state.gallery.available) categories.unshift({ id: 'default', name: 'Default', count: state.gallery.items.length });
+    if (state.gallery.available) categories.push({ id: 'default', name: 'Default', count: state.gallery.items.length });
     const previousSelection = JSON.stringify(state.selection);
     const hadSelection = Boolean(state.selection.categoryId);
     if (!this.loading && !this.loadError) {
       if (!categories.some(category => category.id === state.selection.categoryId)) {
-        state.selection = categories[0] ? { categoryId: categories[0].id } : {};
+        const firstLocal = categories.find(category => category.id !== 'default');
+        state.selection = firstLocal ? { categoryId: firstLocal.id } : {};
       }
       const awaitingGallery = state.selection.categoryId === 'default' && (state.gallery.pending || state.gallery.failed);
       if (!awaitingGallery && !this.items(state).some(item => item.id === state.selection.itemId)) delete state.selection.itemId;

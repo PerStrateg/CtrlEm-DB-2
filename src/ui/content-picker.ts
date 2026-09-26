@@ -1,3 +1,4 @@
+import { createInfoButton } from './info-tip';
 import type { Item } from '../model/library';
 import type { PickerSelection } from '../shared/picker-protocol';
 import type { MediaType } from './media-preview';
@@ -25,6 +26,7 @@ interface PickerActions {
 /** Keyed controls preserve row focus and list scroll on library updates. */
 export class ContentPickerView {
   readonly element: HTMLElement;
+  private readonly info: HTMLButtonElement;
   private readonly categories: HTMLSelectElement;
   private readonly items: HTMLElement;
   private readonly status: HTMLElement;
@@ -42,7 +44,7 @@ export class ContentPickerView {
     this.element.setAttribute('aria-label', `${label} library`);
     this.element.innerHTML = `
       <div class="ctrlem-db-picker-tools">
-        <select title="Category"></select>
+        <select title="Category"><option value="" disabled hidden>Choose category</option></select>
         <button type="button" class="ctrlem-db-picker-tool" data-action="create" title="Create category" aria-label="Create category">+</button>
         <button type="button" class="ctrlem-db-picker-tool" data-action="edit" title="Edit category" aria-label="Edit category">✎</button>
         <label class="ctrlem-db-picker-previews" title="Show previews"><input type="checkbox" aria-label="Show previews"></label>
@@ -50,6 +52,8 @@ export class ContentPickerView {
       <p class="ctrlem-db-picker-status" role="status"></p>
       <button type="button" data-action="retry" hidden>Retry</button>
       <div class="ctrlem-db-picker-items" role="group" aria-label="Entries"></div>`;
+    this.info = createInfoButton(document, 'About this category', '');
+    this.element.querySelector('.ctrlem-db-picker-tools')!.append(this.info);
     this.categories = this.element.querySelector('select')!;
     this.categories.setAttribute('aria-label', `${label} category`);
     this.items = this.element.querySelector('.ctrlem-db-picker-items')!;
@@ -76,14 +80,18 @@ export class ContentPickerView {
   render(state: PickerViewState): void {
     const options = new Map(Array.from(this.categories.options, option => [option.value, option]));
     const categoryIds = new Set(state.categories.map(category => category.id));
-    for (const option of options.values()) if (!categoryIds.has(option.value)) option.remove();
+    for (const option of options.values()) if (option.value && !categoryIds.has(option.value)) option.remove();
     state.categories.forEach((category, index) => {
       const option = options.get(category.id) ?? this.document.createElement('option');
       option.value = category.id;
       const label = `${category.name} (${category.count})`;
       if (option.textContent !== label) option.textContent = label;
-      if (this.categories.children[index] !== option) this.categories.insertBefore(option, this.categories.children[index] ?? null);
+      if (this.categories.children[index + 1] !== option) this.categories.insertBefore(option, this.categories.children[index + 1] ?? null);
     });
+    const selected = state.categories.find(category => category.id === state.selection.categoryId);
+    const special = selected?.id === 'default' ? 'Images provided by CtrlEm. They are not saved in your library.'
+      : selected?.name === 'Input' ? 'New items you send are saved here automatically.' : 'Choose an item to fill the command. Press Send when you are ready.';
+    this.info.dataset.info = special + (state.mediaType ? ' Preview lets you view or play an item without sending it.' : '');
     this.categories.value = state.selection.categoryId ?? '';
     this.categories.title = this.categories.selectedOptions[0]?.textContent ?? 'Category';
     this.categories.disabled = state.loading || state.loadError || !state.categories.length;
@@ -93,7 +101,7 @@ export class ContentPickerView {
     this.previews.checked = state.previews;
     this.previews.disabled = state.previewBusy;
     const status = state.loading ? 'Loading library…' : state.loadError ? 'Couldn’t load library. Retry.'
-      : state.error ?? (!state.categories.length ? 'No categories yet.' : !state.items.length ? state.emptyMessage ?? 'No items yet.' : '');
+      : state.error ?? (!state.categories.length ? 'No categories yet.' : !state.selection.categoryId ? 'Choose a category or create one.' : !state.items.length ? state.emptyMessage ?? 'No items yet.' : '');
     if (this.status.textContent !== status) this.status.textContent = status;
     this.retry.hidden = !(state.loadError || state.error);
     this.items.classList.toggle('ctrlem-db-picker-media', Boolean(state.mediaType));

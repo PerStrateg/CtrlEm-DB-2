@@ -1,5 +1,9 @@
 /* Shared CtrlEm controls. Site variables are inherited; standalone settings supplies its theme. */
-.ctrlem-db-ui { color: var(--text-primary); font-size: .85rem; }
+.ctrlem-db-ui {
+  --ctrlem-db-space-1: 4px; --ctrlem-db-space-2: 8px; --ctrlem-db-space-3: 12px;
+  --ctrlem-db-space-4: 16px; --ctrlem-db-space-6: 24px; --ctrlem-db-success-muted: #7fa98b;
+  color: var(--text-primary); font-family: inherit; font-size: .875rem; line-height: 1.5;
+}
 .ctrlem-db-ui [hidden], .ctrlem-db-ui[hidden] { display: none !important; }
 .ctrlem-db-ui :where(button:not([data-send]), select) {
   box-sizing: border-box; min-height: 32px; max-width: 100%; padding: 5px 8px;
@@ -22,3 +26,7 @@
 }
 .ctrlem-db-ui :where([role='status']) { font-size: .8rem; overflow-wrap: anywhere; }
 .ctrlem-db-ui :where([role='status']):empty { display: none; }
+
+.ctrlem-db-ui input[type='number'] { -moz-appearance: textfield; appearance: textfield; }
+.ctrlem-db-ui input[type='number']::-webkit-inner-spin-button,
+.ctrlem-db-ui input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }

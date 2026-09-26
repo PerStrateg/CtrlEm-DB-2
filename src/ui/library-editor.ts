@@ -1,4 +1,4 @@
-import { contentTypes, typeLabels } from '../model/library';
+import { createInfoButton } from './info-tip';
 import type { ContentType } from '../model/library';
 import type { EditorDraft } from '../shared/library-protocol';
 
@@ -10,7 +10,6 @@ export interface EditorViewState {
 }
 export interface EditorActions {
   retryLoad(): void;
-  selectType(type: ContentType): void;
   selectCategory(id: string): void;
   create(name: string): Promise<string | undefined>;
   name(value: string): void;
@@ -29,7 +28,7 @@ export interface EditorActions {
 /** Keeps editor controls mounted; rendering never replaces an active textarea. */
 export class LibraryEditorView {
   readonly element: HTMLDivElement;
-  private readonly tabs = new Map<ContentType, HTMLButtonElement>();
+  private readonly formatInfo: HTMLButtonElement;
   private readonly rows = new Map<string, HTMLLIElement>();
   private selectedId?: string;
   private dragging?: string;
@@ -46,11 +45,10 @@ export class LibraryEditorView {
       <div class="ctrlem-db-load-status" role="status"></div>
       <button type="button" class="ctrlem-db-retry-load" hidden>Retry</button>
       <div class="ctrlem-db-workspace" hidden>
-        <div class="ctrlem-db-tabs" role="tablist" aria-label="Content type"></div>
         <div class="ctrlem-db-session-warning" role="status" hidden>
           Draft is only available in this tab. <button type="button">Retry</button>
         </div>
-        <div class="ctrlem-db-tabpanel" id="ctrlem-db-editor-panel" role="tabpanel">
+        <div class="ctrlem-db-tabpanel" id="ctrlem-db-editor-panel" role="group" aria-label="Category editor">
           <aside class="ctrlem-db-categories" aria-label="Categories">
             <button type="button" class="ctrlem-db-create">Create category</button>
             <form class="ctrlem-db-create-form" novalidate hidden>
@@ -64,12 +62,11 @@ export class LibraryEditorView {
           <div class="ctrlem-db-category-editor" hidden>
             <label>Category name<input class="ctrlem-db-name" autocomplete="off" aria-describedby="ctrlem-db-name-error"></label>
             <p id="ctrlem-db-name-error" class="ctrlem-db-error" role="alert"></p>
-            <label>Items<textarea class="ctrlem-db-items" rows="12" spellcheck="false" aria-describedby="ctrlem-db-format ctrlem-db-line-errors"></textarea></label>
-            <p id="ctrlem-db-format" class="ctrlem-db-hint"></p>
+            <div class="ctrlem-db-field-heading"><label for="ctrlem-db-items">Items</label></div><textarea id="ctrlem-db-items" class="ctrlem-db-items" rows="12" spellcheck="false" aria-describedby="ctrlem-db-line-errors"></textarea>
+            <div class="ctrlem-db-editor-footer"><div class="ctrlem-db-save-status" role="status"></div></div>
             <p id="ctrlem-db-line-errors" class="ctrlem-db-error" role="alert"></p>
             <div class="ctrlem-db-line-actions ctrlem-db-actions" role="group" aria-label="Invalid lines" hidden></div>
             <label class="ctrlem-db-previews" hidden><input type="checkbox"> Enable image previews</label>
-            <div class="ctrlem-db-save-status" role="status"></div>
             <button type="button" class="ctrlem-db-retry-save" hidden>Retry</button>
             <div class="ctrlem-db-conflict" hidden>
               <p>Changed in another tab</p>
@@ -87,28 +84,8 @@ export class LibraryEditorView {
     this.text = this.get('.ctrlem-db-items');
     this.list = this.get('.ctrlem-db-category-list');
 
-    for (const type of contentTypes) {
-      const tab = document.createElement('button');
-      tab.type = 'button'; tab.role = 'tab'; tab.id = `ctrlem-db-tab-${type}`;
-      tab.textContent = typeLabels[type]; tab.setAttribute('aria-controls', 'ctrlem-db-editor-panel');
-      tab.addEventListener('click', () => {
-        for (const button of this.tabs.values()) button.tabIndex = button === tab ? 0 : -1;
-        actions.selectType(type);
-      });
-      tab.addEventListener('keydown', event => {
-        let index = contentTypes.indexOf(type);
-        if (event.key === 'ArrowRight') index = (index + 1) % contentTypes.length;
-        else if (event.key === 'ArrowLeft') index = (index + contentTypes.length - 1) % contentTypes.length;
-        else if (event.key === 'Home') index = 0;
-        else if (event.key === 'End') index = contentTypes.length - 1;
-        else return;
-        event.preventDefault();
-        for (const button of this.tabs.values()) button.tabIndex = -1;
-        const next = this.tabs.get(contentTypes[index]!)!;
-        next.tabIndex = 0; next.focus();
-      });
-      this.tabs.set(type, tab); this.get('.ctrlem-db-tabs').append(tab);
-    }
+    this.formatInfo = createInfoButton(document, 'Item format', '');
+    this.get('.ctrlem-db-field-heading').append(this.formatInfo);
     this.get('.ctrlem-db-retry-load').addEventListener('click', actions.retryLoad);
     this.get('.ctrlem-db-session-warning button').addEventListener('click', actions.retrySession);
     this.name.addEventListener('input', () => actions.name(this.name.value));
@@ -180,11 +157,6 @@ export class LibraryEditorView {
     this.get('.ctrlem-db-retry-load').hidden = !state.error;
     this.get('.ctrlem-db-workspace').hidden = state.loading || Boolean(state.error);
     if (state.loading || state.error) return;
-    for (const [type, tab] of this.tabs) {
-      tab.setAttribute('aria-selected', String(type === state.type));
-      if (!this.get('.ctrlem-db-tabs').contains(this.element.ownerDocument.activeElement)) tab.tabIndex = type === state.type ? 0 : -1;
-    }
-    this.get('.ctrlem-db-tabpanel').setAttribute('aria-labelledby', `ctrlem-db-tab-${state.type}`);
     this.get('.ctrlem-db-session-warning').hidden = !state.sessionError;
     this.get('.ctrlem-db-empty').hidden = state.categories.length > 0;
     const ids = new Set(state.categories.map(category => category.id));
@@ -245,7 +217,7 @@ export class LibraryEditorView {
     this.get('.ctrlem-db-previews').hidden = state.type !== 'image';
     this.get<HTMLInputElement>('.ctrlem-db-previews input').checked = state.draft.previewsEnabled;
     const hint = state.type === 'text' ? 'One item per line.' : state.type === 'link' ? 'One address per line. https:// is optional.' : 'One address + optional label per line. https:// is optional.';
-    this.get('#ctrlem-db-format').textContent = hint;
+    this.formatInfo.dataset.info = hint;
     this.text.placeholder = state.type === 'text' ? 'Enter one phrase per line' : state.type === 'link' ? 'example.com' : 'example.com/media Optional label';
     this.name.setAttribute('aria-invalid', String(Boolean(state.nameError)));
     this.get('#ctrlem-db-name-error').textContent = state.nameError ?? '';
@@ -266,7 +238,11 @@ export class LibraryEditorView {
         return button;
       }));
     }
-    this.get('.ctrlem-db-save-status').textContent = state.status;
+    const saveStatus = this.get('.ctrlem-db-save-status');
+    if (saveStatus.textContent !== state.status) saveStatus.textContent = state.status;
+    saveStatus.dataset.saved = String(state.status === 'Saved');
+    const routine = ['Saved', 'Saving…', 'Unsaved changes', ''].includes(state.status);
+    this.get('.ctrlem-db-editor-footer').dataset.attention = String(!routine);
     this.get('.ctrlem-db-retry-save').hidden = state.status !== 'Couldn’t save';
     this.get('.ctrlem-db-conflict').hidden = !state.conflict;
     this.get<HTMLButtonElement>('.ctrlem-db-overwrite').disabled = !state.canOverwrite || state.busy;

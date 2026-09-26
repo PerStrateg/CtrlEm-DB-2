@@ -4,6 +4,8 @@
 .ctrlem-db-rg-button[aria-expanded='true'] { background: color-mix(in srgb, #a66d74 22%, var(--bg-tertiary)); }
 .ctrlem-db-redgifs-open > :not(.ctrlem-db-redgifs) { display: none !important; }
 .ctrlem-db-redgifs { display: flex; flex-direction: column; min-width: 0; height: var(--ctrlem-db-rg-height); }
-.ctrlem-db-rg-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; flex-wrap: wrap; }
+.ctrlem-db-rg-bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; flex-wrap: wrap; }
 .ctrlem-db-rg-bar strong { margin-right: auto; }
 .ctrlem-db-redgifs iframe { display: block; width: 100%; flex: 1; min-height: 520px; border: 0; background: #121212; }
+
+.ctrlem-db-redgifs > [role='status']:not(:empty) { margin: 8px 16px; }

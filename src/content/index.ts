@@ -1,3 +1,5 @@
+import { mountInfoTips } from '../ui/info-tip';
+import '../ui/info-tip.css';
 import { CtrlEmPage } from '../site/ctrlem-page';
 import { LibraryController } from '../library/library-controller';
 import { EditorController } from '../library/editor-controller';
@@ -35,12 +37,14 @@ const runtime = globalThis as typeof globalThis & {
 };
 
 runtime.ctrlEmLibraryController?.dispose();
+const stopInfoTips = mountInfoTips(document);
 const page = new CtrlEmPage(document);
 const results = new ResultsController();
 const shell = new LibraryController(page, () => editor.flushActive(), results);
 const client = new ExtensionLibraryClient();
 let transfer: TransferController | undefined;
-const editor = new EditorController(shell.content, client, () => { transfer?.refresh(); });
+const editor = new EditorController(shell.content, client, () => { transfer?.refresh(); }, type => shell.setActiveType(type));
+shell.bindTypeSelection(type => editor.selectType(type));
 transfer = new TransferController(shell.database, client, editor);
 const fields = new CommandFields(document);
 const pickers = new PickerController(fields, client, (type, id, create, initiator) => {
@@ -63,7 +67,7 @@ const redgifs = new RedgifsController(page, results, async url => {
   await autoSend.queueCommand(command);
 });
 const files = new FilesController(page, results, fields, autoPage);
-runtime.ctrlEmLibraryController = { dispose: () => { files.dispose(); redgifs.dispose(); autoSend.dispose(); unbindAuto(); uploads.dispose(); capture.dispose(); transfer?.dispose(); pickers.dispose(); editor.dispose(); shell.dispose(); } };
+runtime.ctrlEmLibraryController = { dispose: () => { stopInfoTips(); files.dispose(); redgifs.dispose(); autoSend.dispose(); unbindAuto(); uploads.dispose(); capture.dispose(); transfer?.dispose(); pickers.dispose(); editor.dispose(); shell.dispose(); } };
 shell.start();
 editor.start();
 pickers.start();
