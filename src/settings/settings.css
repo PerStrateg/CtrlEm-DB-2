@@ -15,5 +15,6 @@ a { color: var(--accent-primary); }
 .ctrlem-db-settings-block button { justify-self: start; }
 .ctrlem-db-settings-block select { margin-left: var(--ctrlem-db-space-2); }
 .ctrlem-db-actions { display: flex; flex-wrap: wrap; gap: var(--ctrlem-db-space-2); }
+:root:has(body.embedded) { background: transparent; }
 body.embedded { padding: 0; }
 .embedded h1 { display: none; }

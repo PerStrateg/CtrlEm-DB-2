@@ -69,7 +69,7 @@ export class TransferController {
       this.pending = { file: parsed.file, review: parsed.review,
         plan: planImport(loaded.library, parsed.file, 'replace'), discardDrafts: this.editor.transferState().hasDrafts };
       this.showPlan();
-    }, 'Couldn’t read import. Choose a valid CtrlEm DB version 1 JSON file and try again.');
+    }, 'Couldn’t read import. Choose a valid CtrlEm DB export (version 3 or 1) or userscript export (version 1 or 2) and try again.');
   }
   private showPlan(): void {
     const pending = this.pending!;

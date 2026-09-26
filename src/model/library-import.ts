@@ -1,6 +1,6 @@
 import { z } from '../shared/validation';
 import { contentTypes, emptyLibrary } from './library';
-import type { Category } from './library';
+import type { Category, ContentType } from './library';
 import { availableCategoryName, exportLibrary, libraryFileSchema } from './library-file';
 import type { LibraryFile } from './library-file';
 import { normalizeWebAddress } from './web-address';
@@ -14,22 +14,53 @@ const legacySchema = z.object({
   })),
 }).strict();
 
+const nativeV1Schema = z.object({
+  format: z.literal('ctrlem-db'), version: z.literal(1), categories: libraryFileSchema.shape.categories,
+}).strict().transform(file => ({ ...file, version: 3 as const })).pipe(libraryFileSchema);
+
+const legacyTypeMap = { links: 'link', text: 'text', image: 'image', sound: 'sound', video: 'video' } as const satisfies Record<string, ContentType>;
+const contentCategories = z.array(z.object({ name: z.string().trim().min(1), content: z.string() }).strict());
+const legacyV2Schema = z.object({
+  version: z.literal(2), exportedAt: z.string().optional(),
+  autoSendIntervalSeconds: z.number(), minimumRequestIntervalSeconds: z.number(),
+  types: z.object({ links: contentCategories, text: contentCategories, image: contentCategories,
+    sound: contentCategories, video: contentCategories }).strict(),
+}).strict();
+
+interface LegacyCategory {
+  type: ContentType; name: string; previewsEnabled: boolean;
+  items: { value: string; label?: string }[];
+}
+
 export interface ImportReview {
   legacy: boolean; originalItems: number; warnings: string[]; exclusions: string[];
 }
 export interface ReadLibraryImport { file: LibraryFile; review: ImportReview }
 export class LibraryImportError extends Error {}
 
-/** Converts only the known userscript AppExport. The native format stays strict. */
+/** Recognizes known file formats and normalizes them before preview or persistence. */
 export function readLibraryImport(input: unknown): ReadLibraryImport {
-  const native = libraryFileSchema.safeParse(input);
+  const native = z.union([libraryFileSchema, nativeV1Schema]).safeParse(input);
   if (native.success) return { file: native.data, review: { legacy: false,
     originalItems: native.data.categories.reduce((count, category) => count + category.items.length, 0), warnings: [], exclusions: [] } };
   const legacy = legacySchema.safeParse(input);
-  if (!legacy.success) throw new LibraryImportError('Invalid library file. Choose a CtrlEm DB version 1 export or a userscript version 1 export with valid categories.');
+  let categories: LegacyCategory[];
+  if (legacy.success) categories = legacy.data.categories;
+  else {
+    const v2 = legacyV2Schema.safeParse(input);
+    if (!v2.success) throw new LibraryImportError('Invalid library file. Choose a CtrlEm DB version 3 or 1 export, or a userscript version 1 or 2 export with valid categories.');
+    categories = Object.entries(v2.data.types).flatMap(([key, entries]) => entries.map(category => ({
+      type: legacyTypeMap[key as keyof typeof legacyTypeMap], name: category.name, previewsEnabled: true,
+      items: category.content.split(/\r\n|\n|\r/).filter(line => line.trim()).map(value => ({ value })),
+    })));
+  }
+  return convertLegacyCategories(categories);
+}
+
+function convertLegacyCategories(categories: LegacyCategory[]): ReadLibraryImport {
   const library = emptyLibrary();
   const review: ImportReview = { legacy: true, originalItems: 0, warnings: [], exclusions: [] };
-  for (const source of legacy.data.categories) {
+  for (const source of categories) {
     const name = availableCategoryName(library, source.type, source.name);
     if (name !== source.name) review.warnings.push(`${source.name} renamed to ${name}.`);
     const category: Category = { id: crypto.randomUUID(), revision: 1, type: source.type, name,

@@ -9,7 +9,7 @@ const fileCategory = z.object({
   previewsEnabled: z.boolean(), purpose: z.literal('input').optional(),
 }).strict();
 export const libraryFileSchema = z.object({
-  format: z.literal('ctrlem-db'), version: z.literal(1), categories: z.array(fileCategory),
+  format: z.literal('ctrlem-db'), version: z.literal(3), categories: z.array(fileCategory),
 }).strict().superRefine((file, context) => {
   const ids = new Set<string>();
   const names = new Set<string>();
@@ -38,7 +38,7 @@ export interface ImportPlan { categories: Category[]; baseRevision: number; warn
 export interface ImportResult { status: 'saved' | 'conflict'; library: Library; categoryIds: string[] }
 
 export function exportLibrary(library: Library): LibraryFile {
-  return { format: 'ctrlem-db', version: 1, categories: library.categories.map(({ id, type, name, items, previewsEnabled, purpose }) =>
+  return { format: 'ctrlem-db', version: 3, categories: library.categories.map(({ id, type, name, items, previewsEnabled, purpose }) =>
     ({ id, type, name, items: items.map(({ id, value, label }) => ({ id, value, ...(label ? { label } : {}) })), previewsEnabled, ...(purpose ? { purpose } : {}) })) };
 }
 

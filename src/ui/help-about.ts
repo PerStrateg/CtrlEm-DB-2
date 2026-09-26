@@ -50,7 +50,7 @@ export function createHelpAbout(document: Document, version: string): HTMLElemen
       'Unconfirmed means the site did not give a clear result. Check Results: the command may already have been sent. That attempt is not repeated automatically; auto-send continues with its next item. Stop cannot undo a command already sent to the site. Dismiss only clears the notice.',
     ]],
     ['Library backups', [
-      'Settings → Export DB downloads your categories and items. Import DB also accepts an export from version 1 of the old CtrlEm DB userscript.',
+      'Settings → Export DB downloads your categories and items in version 3 format. Import DB accepts CtrlEm DB versions 3 and 1, and old userscript versions 1 and 2.',
       'Review the import before choosing Replace DB. Replacement removes the current saved categories and stops their auto-send tasks. Export a backup first if you want to keep them. Upload account settings and intervals are kept.',
     ]],
     ['Image storage', [
