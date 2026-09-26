@@ -43,12 +43,13 @@ export class FilesPanel {
     const clear = button('Clear all', () => { this.confirmation.hidden = !this.confirmation.hidden; });
     this.previews = doc.createElement('input'); this.previews.type = 'checkbox';
     this.previews.addEventListener('change', () => actions.previews(this.previews.checked));
-    const previewLabel = doc.createElement('label'); previewLabel.append(this.previews, 'Previews');
-    this.send = button('Send', actions.send);
+    this.previews.setAttribute('aria-label', 'Previews'); this.previews.title = 'Previews';
+    const previewLabel = doc.createElement('label'); previewLabel.append(this.previews);
+    this.send = button('Send (single)', actions.send);
     this.interval = doc.createElement('input'); this.interval.type = 'number'; this.interval.min = '3'; this.interval.max = '3600'; this.interval.step = '1';
     this.interval.setAttribute('aria-label', 'Files interval in seconds');
     this.interval.addEventListener('change', () => { if (this.interval.reportValidity()) actions.interval(Number(this.interval.value)); });
-    this.auto = button('Start', actions.auto);
+    this.auto = button('A', actions.auto); this.auto.className = 'ctrlem-db-auto-toggle';
     this.count = doc.createElement('span'); this.count.className = 'ctrlem-db-files-count';
     const seconds = doc.createElement('label'); seconds.append(this.interval, 'sec');
     bar.append(clear, this.count, button('Close', actions.close));
@@ -58,7 +59,7 @@ export class FilesPanel {
       button('Clear files', () => { this.confirmation.hidden = true; actions.clear(); }), button('Cancel', () => { this.confirmation.hidden = true; clear.focus(); }));
     this.status = doc.createElement('p'); this.status.className = 'ctrlem-db-files-status'; this.status.setAttribute('role', 'status'); this.status.hidden = true;
     this.empty = doc.createElement('p'); this.empty.className = 'ctrlem-db-files-empty';
-    this.empty.textContent = 'Add images or a folder: JPG, PNG, GIF, WebP, BMP, AVIF or TIFF. Large files are automatically reduced to 4.5 MB before sending; GIFs stay animated. Select an image to Send, or Start to cycle through the collection.';
+    this.empty.textContent = 'Click Add files or Add folder. JPG, PNG, GIF, WebP, BMP, AVIF, TIFF. Large files resize automatically to 4.5 MB; GIFs stay animated.';
     this.grid = new FilesGrid(doc, actions.select);
     this.element.append(bar, this.confirmation, sendBar, this.empty, this.grid.element, this.status);
     this.element.addEventListener('keydown', event => { if (event.key === 'Escape') { event.stopPropagation(); actions.close(); } });
@@ -70,7 +71,9 @@ export class FilesPanel {
     this.empty.hidden = state.items.length > 0;
     this.previews.checked = state.previews;
     if (this.interval !== this.interval.ownerDocument.activeElement) this.interval.value = String(state.interval);
-    this.interval.disabled = Boolean(task); this.auto.textContent = task ? 'Stop' : 'Start';
+    this.interval.disabled = Boolean(task);
+    this.auto.title = task ? 'Stop auto-send' : 'Start auto-send';
+    this.auto.setAttribute('aria-label', this.auto.title); this.auto.setAttribute('aria-pressed', String(Boolean(task)));
     this.auto.disabled = !task && !state.items.length; this.send.disabled = !state.selected || !state.items.some(item => item.id === state.selected);
     for (const b of this.importButtons) b.disabled = importing;
     this.grid.render(state.items, state.selected, state.previews && !this.element.ownerDocument.hidden, open);
