@@ -9,6 +9,7 @@ import { CommandFields } from '../site/command-fields';
 import type { CommandField, SiteGallery } from '../site/command-fields';
 import { ContentPickerView } from '../ui/content-picker';
 import { MediaPreview } from '../ui/media-preview';
+import type { ImageLoader } from '../images/image-cache-client';
 
 interface PickerState {
   field: CommandField; view: ContentPickerView; gallery: SiteGallery; gallerySignature: string;
@@ -35,7 +36,7 @@ export class PickerController implements AutoPickerSource {
   private readonly preview: MediaPreview;
 
   constructor(private readonly page: CommandFields, private readonly client: LibraryClient & PickerClient,
-    private readonly openEditor: OpenEditor) { this.preview = new MediaPreview(page.document); }
+    private readonly openEditor: OpenEditor, private readonly imageLoader?: ImageLoader) { this.preview = new MediaPreview(page.document); }
 
   context(command: CommandKey): PickerContext {
     const state = this.states.get(command);
@@ -123,7 +124,7 @@ export class PickerController implements AutoPickerSource {
               if (current.previewError) void this.setPreviews(field.key, current.previewError.enabled, current.previewError.id);
             }
           },
-        });
+        }, this.imageLoader);
         state = { field, view, selection: { ...this.selections[field.key] }, gallery, gallerySignature: signature,
           sequence: 0, selectionError: false, previewBusy: false };
         this.states.set(field.key, state);
@@ -136,7 +137,9 @@ export class PickerController implements AutoPickerSource {
       }
     }
     // Keep the view and scroll when a native panel temporarily disappears.
-    for (const [key, state] of this.states) if (!fields.some(field => field.key === key)) state.view.element.remove();
+    for (const [key, state] of this.states) if (!fields.some(field => field.key === key)) {
+      state.view.suspend(); state.view.element.remove();
+    }
     this.preview.reconcile();
   }
 
@@ -235,7 +238,7 @@ export class PickerController implements AutoPickerSource {
   dispose(): void {
     this.preview.close(false);
     this.disposed = true; this.stopObserving?.(); this.unsubscribe?.();
-    for (const state of this.states.values()) state.view.element.remove();
+    for (const state of this.states.values()) state.view.dispose();
     this.page.restoreGalleries();
   }
 }

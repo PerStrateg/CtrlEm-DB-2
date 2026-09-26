@@ -38,6 +38,15 @@ export class LibraryShell {
     this.settingsButton.textContent = 'Settings';
     this.settings = document.createElement('div');
     this.settings.className = 'ctrlem-db-settings';
+    const openSettings = document.createElement('button'); openSettings.type = 'button';
+    openSettings.textContent = 'Open settings in a new tab';
+    const settingsStatus = document.createElement('p'); settingsStatus.setAttribute('role', 'status');
+    openSettings.onclick = () => {
+      void chrome.runtime.sendMessage({ type: 'settings:open' }).then(reply => {
+        settingsStatus.textContent = reply.ok ? '' : 'Couldn’t open settings. Try again.';
+      }, () => { settingsStatus.textContent = 'Couldn’t open settings. Try again.'; });
+    };
+    this.settings.append(openSettings, settingsStatus);
     this.database = document.createElement('div'); this.database.className = 'ctrlem-db-database';
     this.settings.append(this.database);
     this.back = document.createElement('button');
@@ -48,7 +57,7 @@ export class LibraryShell {
     this.settingsButton.onclick = () => {
       if (!this.settings.querySelector('iframe')) {
         const frame = document.createElement('iframe');
-        frame.title = 'Upload provider settings';
+        frame.title = 'Extension settings';
         frame.src = chrome.runtime.getURL('settings.html');
         this.settings.append(frame);
       }

@@ -14,7 +14,7 @@ export interface UploadClient {
 
 export class ExtensionUploadClient implements UploadClient {
   async openAccessSettings(): Promise<void> {
-    const reply: Reply<void> = await chrome.runtime.sendMessage({ type: 'upload:open-access-settings' });
+    const reply: Reply<void> = await chrome.runtime.sendMessage({ type: 'settings:open' });
     if (!reply.ok) throw new Error('Couldn’t open provider settings.');
   }
   async catboxAllowed(): Promise<boolean> {

@@ -5,6 +5,9 @@ import '../ui/common.css';
 import '../ui/extension-theme.css';
 import './settings.css';
 import { mountProviderAccess } from './provider-access-view';
+import { mountImageCacheSettings } from './image-cache-view';
+
+mountImageCacheSettings(document);
 
 // Permission APIs are not reliably exposed to web-accessible embedded extension pages.
 if (window.top === window) mountProviderAccess(document, chrome.permissions);

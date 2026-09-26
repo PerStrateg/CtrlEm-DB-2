@@ -11,8 +11,11 @@ import { uploadPortName, uploadReadyRequest } from '../shared/upload-protocol';
 import { diagnosticUploadFetch } from './upload-network';
 import { catboxAccess } from '../shared/provider-access';
 import { registerAutoSend } from './auto-send-runtime';
+import { registerImageCache } from './image-cache-runtime';
+import { imageCachePort } from '../shared/image-cache-protocol';
 
 registerAutoSend();
+registerImageCache();
 
 const credentials = new CredentialsRepository(chrome.storage.local, openCredentialKey);
 const credentialsQueue = new WriteQueue();
@@ -27,6 +30,7 @@ chrome.permissions.onAdded.addListener(accessChanged);
 chrome.permissions.onRemoved.addListener(accessChanged);
 
 chrome.runtime.onConnect.addListener(port => {
+  if (port.name === imageCachePort) return;
   if (port.name !== uploadPortName || !port.sender || authorizedTab(port.sender, chrome.runtime.id) === undefined) { port.disconnect(); return; }
   const upload = new UploadSession(credentials, uploadRequest, () => chrome.permissions.contains(catboxAccess));
   let connected = true;
@@ -43,6 +47,7 @@ const service = new LibraryService(
 
 // Register listeners synchronously for service-worker/event-page wakeups.
 chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
+  if ((message as { type?: string })?.type?.startsWith('image-cache:')) return false;
   if ((message as { type?: string })?.type?.startsWith('auto:')) return false;
   if (authorizedSettings(sender, chrome.runtime.id, chrome.runtime.getURL('settings.html'))) {
     void credentialsQueue.run(async () => {
@@ -69,7 +74,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
       () => respond({ ok: false, error: 'Couldn’t check Catbox access.' }));
     return true;
   }
-  if ((message as { type?: string })?.type === 'upload:open-access-settings') {
+  if ((message as { type?: string })?.type === 'settings:open') {
     void chrome.runtime.openOptionsPage().then(() => respond({ ok: true }),
       () => respond({ ok: false, error: 'Couldn’t open provider settings.' }));
     return true;

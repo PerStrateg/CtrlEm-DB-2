@@ -1,6 +1,8 @@
 import type { Item } from '../model/library';
 import type { PickerSelection } from '../shared/picker-protocol';
 import type { MediaType } from './media-preview';
+import { VisibleImages } from '../images/visible-images';
+import type { ImageLoader } from '../images/image-cache-client';
 
 export interface PickerCategory { id: string; name: string; count: number }
 export interface PickerViewState {
@@ -32,8 +34,9 @@ export class ContentPickerView {
   private readonly previews: HTMLInputElement;
   private readonly rows = new Map<string, HTMLButtonElement>();
   private categoryId?: string;
+  private images?: VisibleImages;
 
-  constructor(private readonly document: Document, label: string, actions: PickerActions) {
+  constructor(private readonly document: Document, label: string, actions: PickerActions, private readonly imageLoader?: ImageLoader) {
     this.element = document.createElement('section');
     this.element.className = 'ctrlem-db-picker ctrlem-db-ui';
     this.element.setAttribute('aria-label', `${label} library`);
@@ -97,7 +100,8 @@ export class ContentPickerView {
     this.items.classList.toggle('ctrlem-db-picker-grid', state.image);
     this.items.classList.toggle('ctrlem-db-picker-no-previews', state.image && !state.previews);
     const ids = new Set(state.items.map(item => item.id));
-    for (const [id, row] of this.rows) if (!ids.has(id)) { row.parentElement!.remove(); this.rows.delete(id); }
+    for (const [id, row] of this.rows) if (!ids.has(id)) { this.images?.set(row); row.parentElement!.remove(); this.rows.delete(id); }
+    if (state.image && state.previews) this.images ??= new VisibleImages(this.document, this.imageLoader);
     state.items.forEach((item, index) => {
       let row = this.rows.get(item.id);
       if (!row) {
@@ -113,19 +117,7 @@ export class ContentPickerView {
       row.title = item.label ? `${item.label}\n${item.value}` : item.value;
       row.setAttribute('aria-label', label);
       row.setAttribute('aria-pressed', String(state.selection.itemId === item.id));
-      let img = row.querySelector('img');
-      if (state.image && state.previews) {
-        if (!img) {
-          img = this.document.createElement('img'); img.loading = 'lazy'; img.alt = '';
-          img.referrerPolicy = 'no-referrer';
-          const failed = this.document.createElement('small'); failed.hidden = true;
-          img.addEventListener('error', () => { img!.hidden = true; failed.hidden = false; failed.textContent = `Preview unavailable: ${item.value}`; });
-          row.prepend(img); row.append(failed);
-        }
-        if (img.getAttribute('src') !== item.value) {
-          img.hidden = false; row.querySelector('small')!.hidden = true; img.src = item.value;
-        }
-      } else { img?.remove(); row.querySelector('small')?.remove(); }
+      this.images?.set(row, state.image && state.previews ? item.value : undefined);
       const card = row.parentElement!;
       let preview = card.querySelector<HTMLButtonElement>('[data-preview-id]');
       if (state.mediaType) {
@@ -150,4 +142,6 @@ export class ContentPickerView {
     if (this.categoryId !== state.selection.categoryId) this.items.scrollTop = 0;
     this.categoryId = state.selection.categoryId;
   }
+  suspend(): void { this.images?.suspend(); }
+  dispose(): void { this.images?.dispose(); this.element.remove(); }
 }
