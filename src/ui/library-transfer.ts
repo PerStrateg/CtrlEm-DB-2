@@ -1,4 +1,5 @@
 import { typeLabels } from '../model/library';
+import { createInfoButton } from './info-tip';
 import type { ImportPlan } from '../model/library-file';
 import type { ImportReview } from '../model/library-import';
 
@@ -29,6 +30,7 @@ export class LibraryTransferView {
       <div class="ctrlem-db-transfer-panel" hidden></div>
       </fieldset><p role="status"></p>`;
     this.controls = this.element.querySelector('fieldset')!;
+    this.element.querySelector('[data-transfer=import]')!.after(createInfoButton(document, 'About imports', 'Supports userscript versions 1–2 and CtrlEm DB backups. Choose a file, then click Replace DB to complete the import.'));
     this.panel = this.element.querySelector('.ctrlem-db-transfer-panel')!;
     this.status = this.element.querySelector('[role=status]')!;
     const file = this.element.querySelector('input')!;
