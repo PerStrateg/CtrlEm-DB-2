@@ -67,6 +67,25 @@ export class CtrlEmPage {
     } else if (button.parentElement !== parent) parent.append(button);
   }
 
+  mountFilesLauncher(button: HTMLElement): void {
+    const heading = this.document.querySelector<HTMLElement>('[data-acc="popupImage"]');
+    if (!heading) return;
+    const parent = heading.parentElement!;
+    if (!parent.classList.contains('ctrlem-db-image-heading')) {
+      const row = this.document.createElement('div'); row.className = 'ctrlem-db-image-heading';
+      heading.before(row); row.append(heading, button);
+    } else if (button.parentElement !== parent) parent.append(button);
+  }
+  removeFilesLauncher(button: HTMLElement): void {
+    const row = button.parentElement; button.remove();
+    if (row?.classList.contains('ctrlem-db-image-heading')) row.replaceWith(...row.childNodes);
+  }
+  mountFiles(panel: HTMLElement, content: HTMLElement): ResultsMount {
+    panel.append(content);
+    return { setOpen: open => panel.classList.toggle('ctrlem-db-files-open', open),
+      dispose: () => { panel.classList.remove('ctrlem-db-files-open'); content.remove(); } };
+  }
+
   removeRedgifsLauncher(button: HTMLElement): void {
     const row = button.parentElement;
     button.remove();

@@ -8,11 +8,12 @@ import type { AutoPageState, AutoSnapshot } from '../shared/auto-send-protocol';
 import { receiverFromUrl, receiverUrl } from '../model/send-command';
 import { authorizedTab } from './library-service';
 import { WriteQueue } from '../storage/library-store';
+import type { FilesSource } from './files-service';
 
 const alarmName = 'ctrlem.auto-send.wake';
 const recipient = receiverFromUrl;
 
-export function registerAutoSend(queue: WriteQueue): AutoSendService {
+export function registerAutoSend(queue: WriteQueue, files?: FilesSource): AutoSendService {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let alarmAt: number | undefined;
   const tabs = () => chrome.tabs.query({ url: ['https://ctrlem.com/u/*', 'https://ctrlem.com/groups/*'] });
@@ -57,7 +58,7 @@ export function registerAutoSend(queue: WriteQueue): AutoSendService {
       // Alarms recover sleeping workers; the live timer handles sub-30-second intervals.
       void (time === undefined ? chrome.alarms.clear(alarmName) : chrome.alarms.create(alarmName, { when: time })).catch(failed);
     },
-  }, Date.now, queue);
+  }, Date.now, queue, files);
   chrome.runtime.onMessage.addListener((input: unknown, sender, respond) => {
     if (!(input as { type?: string })?.type?.startsWith('auto:')) return false;
     const tabId = authorizedTab(sender, chrome.runtime.id), parsed = autoRequestSchema.safeParse(input);

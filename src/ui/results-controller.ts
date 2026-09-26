@@ -1,4 +1,4 @@
-export type ResultsView = 'site' | 'library' | 'redgifs';
+export type ResultsView = 'site' | 'library' | 'redgifs' | 'files';
 
 /** One owner for the visible Results view; each panel retains its own data. */
 export class ResultsController {

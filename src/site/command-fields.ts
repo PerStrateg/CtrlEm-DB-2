@@ -1,6 +1,7 @@
 import { commandKeys, commands } from '../model/commands';
 import type { CommandKey } from '../model/commands';
 import type { Item } from '../model/library';
+import type { NativeUpload } from '../model/files';
 
 export interface CommandField { key: CommandKey; input: HTMLInputElement | HTMLTextAreaElement }
 export interface SiteGallery { available: boolean; pending: boolean; failed: boolean; items: Item[] }
@@ -92,6 +93,33 @@ export class CommandFields {
       });
     return { available: Boolean(gallery), pending: Boolean(gallery && !gallery.children.length),
       failed: gallery?.querySelector('.upload-gallery-empty')?.textContent === 'Failed to load uploads', items };
+  }
+
+  syncUploads(uploads: NativeUpload[]): void {
+    for (const gallery of this.document.querySelectorAll<HTMLElement>('[id^="gallery-"]')) {
+      const ids = Array.from(gallery.querySelectorAll<HTMLElement>('[data-upload-id]')).map(node => node.dataset.uploadId);
+      if (JSON.stringify(ids) === JSON.stringify(uploads.map(upload => upload.id))) continue;
+      const key = gallery.id.slice('gallery-'.length);
+      const fragment = this.document.createDocumentFragment();
+      for (const upload of uploads) {
+        const wrapper = this.document.createElement('div'); wrapper.className = 'gallery-thumb-wrapper'; wrapper.dataset.uploadId = upload.id;
+        const image = this.document.createElement('img'); image.className = 'gallery-thumb'; image.src = upload.url; image.alt = upload.originalName;
+        image.addEventListener('click', () => {
+          const input = this.document.getElementById(`val-${key}`) as HTMLInputElement | null;
+          if (input) input.value = `${this.document.location.origin}${upload.url}`;
+        });
+        const remove = this.document.createElement('button'); remove.type = 'button'; remove.className = 'gallery-thumb-delete'; remove.textContent = '×'; remove.title = 'Delete';
+        remove.addEventListener('click', event => {
+          event.stopPropagation();
+          void fetch(`/api/uploads/${encodeURIComponent(upload.id)}`, { method: 'DELETE', credentials: 'same-origin' }).then(response => {
+            if (!response.ok) throw new Error('Failed to delete image.'); wrapper.remove();
+          }).catch(() => { remove.title = 'Failed to delete image. Try again.'; });
+        });
+        wrapper.append(image, remove); fragment.append(wrapper);
+      }
+      if (!uploads.length) { const empty = this.document.createElement('span'); empty.className = 'upload-gallery-empty'; empty.textContent = 'No uploaded images'; fragment.append(empty); }
+      gallery.replaceChildren(fragment);
+    }
   }
 
   fill(field: CommandField, item: Item, native: boolean): void {

@@ -25,6 +25,8 @@ import '../ui/auto-send.css';
 import '../ui/redgifs.css';
 import { ResultsController } from '../ui/results-controller';
 import { RedgifsController } from '../redgifs/redgifs-controller';
+import { FilesController } from '../files/files-controller';
+import '../ui/files.css';
 
 // This global belongs to the extension's isolated world, not the page's scripts.
 // Reinjection replaces the previous controller and releases its DOM bindings.
@@ -60,7 +62,8 @@ const redgifs = new RedgifsController(page, results, async url => {
   command.fields = command.fields.map(field => field.id === commands.videoOverlay.fieldId ? { ...field, value: url } : field);
   await autoSend.queueCommand(command);
 });
-runtime.ctrlEmLibraryController = { dispose: () => { redgifs.dispose(); autoSend.dispose(); unbindAuto(); uploads.dispose(); capture.dispose(); transfer?.dispose(); pickers.dispose(); editor.dispose(); shell.dispose(); } };
+const files = new FilesController(page, results, fields, autoPage);
+runtime.ctrlEmLibraryController = { dispose: () => { files.dispose(); redgifs.dispose(); autoSend.dispose(); unbindAuto(); uploads.dispose(); capture.dispose(); transfer?.dispose(); pickers.dispose(); editor.dispose(); shell.dispose(); } };
 shell.start();
 editor.start();
 pickers.start();
@@ -69,3 +72,4 @@ uploads.start();
 autoSend.start();
 
 redgifs.start();
+files.start();

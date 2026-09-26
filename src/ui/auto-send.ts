@@ -15,7 +15,9 @@ function button(document: Document, label: string, action: () => void): HTMLButt
   const element = document.createElement('button'); element.type = 'button';
   element.textContent = label; element.addEventListener('click', action); return element;
 }
-function taskDetails(task: Pick<AutoTask, 'status' | 'reason' | 'failureCode' | 'retryCount'>): string {
+function taskDetails(task: Pick<AutoTask, 'status' | 'reason' | 'failureCode' | 'retryCount' | 'fileError' | 'preparation'>): string {
+  if (task.fileError) return task.fileError;
+  if (task.preparation) return 'Preparing image for CtrlEm…';
   const cause = task.failureCode ? `${sendFailureMessages[task.failureCode]} ` : '';
   if (task.status === 'paused') return `Paused · ${cause}${task.reason === 'failed' && (task.retryCount ?? 0) > sendQueueLimits.maxRetries
     ? 'Retry limit reached. Resume to try again.' : pauseReasons[task.reason!]}`;
@@ -117,7 +119,7 @@ export class AutoTaskPanel {
   render(snapshot: AutoSnapshot, connected: boolean, pending: ReadonlyMap<string, string>, error?: string): void {
     const now = Date.now(), times = projectedSendTimes(snapshot, now);
     const entries = orderedQueue(snapshot, now).map(entry => isManualSend(entry)
-      ? { ...entry, manual: true, label: entry.parameters.label, source: `Manual · ${entry.parameters.fields.find(field => field.value)?.value ?? ''}` }
+      ? { ...entry, manual: true, label: entry.parameters.label, source: entry.source === 'files' ? 'Files · Manual' : `Manual · ${entry.parameters.fields.find(field => field.value)?.value ?? ''}` }
       : { ...entry, manual: false, label: autoCommandLabel(entry.command), source: `${entry.categoryName} · Auto · ${entry.intervalSeconds} sec` });
     const panelHadFocus = this.element.contains(this.document.activeElement);
     flag(this.element, 'hidden', !entries.length && !snapshot.notices.length && !error);
@@ -166,7 +168,7 @@ export class AutoTaskPanel {
       text(row.details, details);
       attribute(row.element, 'data-status', task.status);
       text(row.status, pending.get(task.id) ?? (!connected ? '—' : task.status === 'paused' ? 'Paused' :
-        task.status === 'stopping' ? 'Stopping…' : task.status === 'running' ? 'Sending…' :
+        task.status === 'stopping' ? 'Stopping…' : task.preparation ? 'Preparing…' : task.status === 'running' ? 'Sending…' :
           task.reason === 'busy' ? 'Site busy' : times.has(task.id) ? countdown(times.get(task.id)!, now) : 'Awaiting site…'));
       attribute(row.status, 'title', connected ? taskDetails(task) || 'Time until next send' : 'Refresh to update');
       text(row.stop, task.manual ? 'Cancel' : 'Stop');

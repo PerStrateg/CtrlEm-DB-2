@@ -1,0 +1,23 @@
+.ctrlem-db-image-heading { display: flex; align-items: center; gap: 8px; }
+.ctrlem-db-image-heading > [data-acc] { flex: 1; min-width: 0; }
+.ctrlem-db-files-open > :not(.ctrlem-db-files) { display: none !important; }
+.ctrlem-db-files { display: flex; flex-direction: column; min-width: 0; height: var(--ctrlem-db-files-height); }
+.ctrlem-db-files-bar { display: flex; gap: 8px; padding: 8px 10px; align-items: center; flex-wrap: wrap; }
+.ctrlem-db-files-send-bar { padding-top: 0; }
+.ctrlem-db-files-send-bar > label:last-child { margin-left: auto; }
+.ctrlem-db-files-bar label { display: inline-flex; align-items: center; gap: 5px; }
+.ctrlem-db-files-bar input[type=number] { width: 65px; }
+.ctrlem-db-files-bar input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent-primary); }
+.ctrlem-db-files-count { margin-left: auto; font-size: .85rem; color: var(--text-secondary); }
+.ctrlem-db-files-status, .ctrlem-db-files-confirm { margin: 4px 10px; font-size: .85rem; overflow-wrap: anywhere; }
+.ctrlem-db-files-status { flex-shrink: 0; padding: 6px 0; }
+.ctrlem-db-files-empty { margin: 12px 10px; max-width: 65ch; color: var(--text-secondary); font-size: .9rem; line-height: 1.5; }
+.ctrlem-db-files [hidden] { display: none !important; }
+.ctrlem-db-files-grid { overflow: auto; flex: 1; min-height: 0; padding: 8px; }
+.ctrlem-db-files-canvas { position: relative; }
+.ctrlem-db-files-card { position: absolute; left: 0; top: 0; width: 128px; height: 128px; padding: 0; border: 2px solid var(--border-color); border-radius: 6px; overflow: hidden; background: var(--bg-tertiary); }
+.ctrlem-db-files-card img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.ctrlem-db-files-card[data-uploaded=true] { border-color: color-mix(in srgb, var(--border-color) 45%, var(--accent-primary)); }
+.ctrlem-db-files-card[aria-pressed=true] { outline: 3px solid var(--accent-primary); outline-offset: 2px; }
+.ctrlem-db-files-card:focus-visible { outline: 3px solid var(--text-primary); outline-offset: 2px; }
+.ctrlem-db-files-no-preview, .ctrlem-db-files-card:not(:has(img)) { background-image: repeating-linear-gradient(135deg, transparent 0 6px, var(--border-color) 6px 8px); }

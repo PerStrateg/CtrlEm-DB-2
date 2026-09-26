@@ -68,7 +68,7 @@ export class AutoSendController {
     finally { this.render(); }
   }
   private task(key: AutoCommandKey): AutoTask | undefined {
-    return this.snapshot.tasks.find(task => task.receiver === this.receiver && task.command === key);
+    return this.snapshot.tasks.find(task => task.receiver === this.receiver && task.command === key && task.source !== 'files');
   }
   private accept(snapshot: AutoSnapshot): void {
     if (snapshot.revision >= this.snapshot.revision) this.snapshot = snapshot;

@@ -17,9 +17,13 @@ import { registerImageCache } from './image-cache-runtime';
 import { imageCachePort } from '../shared/image-cache-protocol';
 import { IntervalRepository } from '../storage/interval-store';
 import { intervalRequestSchema } from '../shared/interval-protocol';
+import { createFilesService, registerFiles } from './files-runtime';
+import { filesPort } from '../shared/files-protocol';
 
 const libraryQueue = new WriteQueue();
-const scheduler = registerAutoSend(libraryQueue);
+const files = createFilesService();
+const scheduler = registerAutoSend(libraryQueue, files);
+registerFiles(files, () => scheduler.clearFiles());
 registerImageCache();
 registerRedgifs();
 registerRedgifsAdblock();
@@ -39,7 +43,7 @@ chrome.permissions.onAdded.addListener(accessChanged);
 chrome.permissions.onRemoved.addListener(accessChanged);
 
 chrome.runtime.onConnect.addListener(port => {
-  if (port.name === imageCachePort) return;
+  if (port.name === imageCachePort || port.name === filesPort) return;
   if (port.name !== uploadPortName || !port.sender || authorizedTab(port.sender, chrome.runtime.id) === undefined) { port.disconnect(); return; }
   const upload = new UploadSession(credentials, uploadRequest, () => chrome.permissions.contains(catboxAccess));
   let connected = true;
@@ -56,6 +60,7 @@ const service = new LibraryService(
 
 // Register listeners synchronously for service-worker/event-page wakeups.
 chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
+  if ((message as { type?: string })?.type?.startsWith('files:')) return false;
   if ((message as { type?: string })?.type?.startsWith('redgifs:')) return false;
   if ((message as { type?: string })?.type?.startsWith('interval:')) {
     const parsed = intervalRequestSchema.safeParse(message);

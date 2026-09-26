@@ -1,5 +1,4 @@
 import { commandKeys, commands } from './commands';
-import type { Item } from './library';
 import type { SendCommand } from './send-command';
 import { sendQueueLimits } from './send-command';
 
@@ -16,6 +15,7 @@ export const pauseReasons = {
   interrupted: 'Page reloaded or closed. Open the page, then Resume.',
   busy: 'Wait a moment, then Resume.',
   storage: '',
+  file: 'Could not prepare or upload the image. Check Files, then Resume.',
 } as const;
 export type PauseReason = keyof typeof pauseReasons;
 export interface AutoExecution {
@@ -36,6 +36,10 @@ export const sendFailureMessages = {
 export type SendFailureCode = keyof typeof sendFailureMessages;
 export type AutoOutcome = { status: 'success' } | { status: 'paused'; reason: PauseReason; retryAfterMs?: number; failureCode?: SendFailureCode };
 export interface AutoTask {
+  source?: 'files';
+  preparation?: { token: string; itemId: string };
+  preparedItemId?: string;
+  fileError?: string;
   id: string; receiver: string; command: AutoCommandKey; tabId: number;
   categoryId?: string; categoryName: string; intervalSeconds: number;
   status: 'queued' | 'running' | 'stopping' | 'paused'; reason?: PauseReason;
@@ -49,6 +53,10 @@ export interface AutoTask {
   retryExecution?: AutoExecution;
 }
 export interface ManualSend {
+  source?: 'files'; fileId?: string;
+  preparation?: { token: string; itemId: string };
+  preparedItemId?: string;
+  fileError?: string;
   id: string; receiver: string; tabId: number; parameters: SendCommand;
   status: AutoTask['status']; reason?: PauseReason; dueAt: number; sequence: number;
   retryCount: number; execution?: AutoExecution;
@@ -80,7 +88,7 @@ export function projectedSendTimes(state: Pick<AutoState, 'tasks' | 'sends' | 'n
   const times = new Map<string, number>();
   // An in-flight request has no known completion time. Recalculate when its result arrives.
   if ([...state.tasks, ...state.sends].some(entry => entry.execution)) return times;
-  const pending = (entry: QueueEntry) => entry.status === 'queued' && entry.reason !== 'busy';
+  const pending = (entry: QueueEntry) => entry.status === 'queued' && entry.reason !== 'busy' && !entry.preparation;
   const projected = {
     tasks: state.tasks.filter(pending).map(entry => ({ ...entry })),
     sends: state.sends.filter(pending).map(entry => ({ ...entry })),
@@ -103,7 +111,7 @@ export function projectedSendTimes(state: Pick<AutoState, 'tasks' | 'sends' | 'n
 }
 
 /** Continue in the saved order when the next item was deleted between attempts. */
-export function nextAutoItem(task: Pick<AutoTask, 'orderIds' | 'nextItemId'>, items: Item[]): Item | undefined {
+export function nextAutoItem<T extends { id: string }>(task: Pick<AutoTask, 'orderIds' | 'nextItemId'>, items: T[]): T | undefined {
   const selected = items.find(item => item.id === task.nextItemId);
   if (selected) return selected;
   const index = task.orderIds.indexOf(task.nextItemId ?? '');
