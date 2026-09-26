@@ -7,6 +7,7 @@ import type { AutoPickerSource, PickerItemChoice } from '../shared/picker-protoc
 import { AutoSendPage } from '../site/auto-send-page';
 import { CommandFields } from '../site/command-fields';
 import { AutoSendControl, AutoTaskPanel } from '../ui/auto-send';
+import type { IntervalController } from './interval-controller';
 
 export class AutoSendController {
   private snapshot: AutoSnapshot = { ...emptyAutoState(), readyReceivers: [] };
@@ -23,7 +24,7 @@ export class AutoSendController {
   readonly panel: AutoTaskPanel;
   constructor(private readonly page: AutoSendPage, private readonly fields: CommandFields,
     private readonly pickers: AutoPickerSource, private readonly client: AutoClient,
-    private readonly captured: (command: SendCommand) => void = () => {}) {
+    private readonly captured: (command: SendCommand) => void = () => {}, private readonly intervals?: IntervalController) {
     this.receiver = page.receiver();
     this.panel = new AutoTaskPanel(page.document, {
       dismiss: id => { void this.act({ type: 'auto:dismiss', id }); },
@@ -38,6 +39,7 @@ export class AutoSendController {
     });
   }
   start(): void {
+    this.intervals?.start();
     this.page.native.mount(command => { void this.enqueue(command); },
       () => { void this.client.request({ type: 'auto:ready' }).catch(() => undefined); },
       message => { this.error = message; this.render(); });
@@ -102,12 +104,14 @@ export class AutoSendController {
       this.error = error instanceof Error ? error.message : 'Couldn’t update auto-send. Retry.';
     } finally { if (key) this.pending.delete(key); this.render(); }
   }
-  private toggle(key: AutoCommandKey): void {
+  private async toggle(key: AutoCommandKey): Promise<void> {
     const task = this.task(key);
     if (task?.status === 'paused' && task.reason !== 'invalid') { void this.act({ type: 'auto:resume', id: task.id }, task.id, 'Starting…'); return; }
     if (task) { void this.act({ type: 'auto:stop', id: task.id }, task.id, 'Stopping…'); return; }
     const control = this.controls.get(key)!;
     if (!control.interval.reportValidity()) return;
+    if (this.intervals && !await this.intervals.flush(key)) return;
+    if (this.disposed || this.task(key)) return;
     const context = key === 'sendOrDelete' ? undefined : this.pickers.context(key);
     if (context?.loading || context?.loadError) { this.error = 'Wait for the library to load, then retry.'; this.render(); return; }
     void this.act({ type: 'auto:start', command: key, parameters: this.page.native.capture(key, false), categoryId: context?.selection.categoryId,
@@ -123,8 +127,9 @@ export class AutoSendController {
     for (const key of state.commands) {
       let control = this.controls.get(key);
       if (!control) {
-        control = new AutoSendControl(this.page.document, key, { toggle: () => this.toggle(key) });
+        control = new AutoSendControl(this.page.document, key, { toggle: () => { void this.toggle(key); } });
         this.controls.set(key, control);
+        this.intervals?.register(key, control);
       }
       this.page.mountControl(key, control.element);
     }
@@ -148,6 +153,7 @@ export class AutoSendController {
     this.page.placeTaskPanel(this.panel.element);
   }
   dispose(): void {
+    this.intervals?.dispose();
     void this.client.request({ type: 'auto:detach' }).catch(() => undefined);
     this.disposed = true; for (const cleanup of this.cleanups) cleanup(); this.page.dispose(); this.page.restoreLayout();
     for (const control of this.controls.values()) control.element.remove(); this.panel.element.remove();

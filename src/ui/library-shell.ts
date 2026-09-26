@@ -1,3 +1,5 @@
+import { createHelpAbout } from './help-about';
+
 export const libraryRegionId = 'ctrlem-db-library';
 
 /** Owns placement and the persistent content container; editors own their state. */
@@ -10,6 +12,8 @@ export class LibraryShell {
   private readonly libraryButton: HTMLButtonElement;
   private readonly settingsButton: HTMLButtonElement;
   private readonly back: HTMLButtonElement;
+  private readonly help: HTMLElement;
+  private readonly helpButton: HTMLButtonElement;
 
   constructor(document: Document) {
     this.element = document.createElement('section');
@@ -36,6 +40,13 @@ export class LibraryShell {
     this.libraryButton.textContent = 'Categories';
     this.settingsButton = document.createElement('button');
     this.settingsButton.textContent = 'Settings';
+    this.helpButton = document.createElement('button'); this.helpButton.type = 'button'; this.helpButton.textContent = 'Help & About';
+    this.help = createHelpAbout(document, chrome.runtime.getManifest().version);
+    this.helpButton.onclick = () => {
+      this.content.hidden = this.settings.hidden = true; this.help.hidden = false; this.back.hidden = true;
+      this.libraryButton.setAttribute('aria-pressed', 'false'); this.settingsButton.setAttribute('aria-pressed', 'false');
+      this.helpButton.setAttribute('aria-pressed', 'true');
+    };
     this.settings = document.createElement('div');
     this.settings.className = 'ctrlem-db-settings';
     const openSettings = document.createElement('button'); openSettings.type = 'button';
@@ -62,19 +73,21 @@ export class LibraryShell {
         this.settings.append(frame);
       }
       this.content.hidden = true;
+      this.help.hidden = true; this.helpButton.setAttribute('aria-pressed', 'false');
       this.settings.hidden = false;
       this.libraryButton.setAttribute('aria-pressed', 'false');
       this.settingsButton.setAttribute('aria-pressed', 'true');
     };
     this.libraryButton.type = this.settingsButton.type = 'button';
-    navigation.append(this.libraryButton, this.settingsButton, this.back);
-    this.element.append(header, navigation, this.content, this.settings);
+    navigation.append(this.libraryButton, this.settingsButton, this.helpButton, this.back);
+    this.element.append(header, navigation, this.content, this.settings, this.help);
     this.showCategories();
   }
 
   showCategories(): void {
     this.content.hidden = false;
     this.settings.hidden = true;
+    this.help.hidden = true; this.helpButton.setAttribute('aria-pressed', 'false');
     this.libraryButton.setAttribute('aria-pressed', 'true');
     this.settingsButton.setAttribute('aria-pressed', 'false');
     this.back.hidden = true;

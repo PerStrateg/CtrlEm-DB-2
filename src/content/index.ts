@@ -11,6 +11,8 @@ import { ExtensionUploadClient } from '../upload/extension-upload-client';
 import { AutoSendPage } from '../site/auto-send-page';
 import { AutoSendController } from '../auto-send/auto-send-controller';
 import { ExtensionAutoClient, bindAutoExecutor } from '../auto-send/extension-auto-client';
+import { IntervalController } from '../auto-send/interval-controller';
+import { ExtensionIntervalClient } from '../auto-send/extension-interval-client';
 import { commands, commandKeys } from '../model/commands';
 import '../site/ctrlem-page.css';
 import '../ui/common.css';
@@ -47,7 +49,7 @@ const autoSend = new AutoSendController(autoPage, fields, pickers, new Extension
   const key = commandKeys.find(key => key === command.key);
   if (key) { const value = command.fields.find(field => field.id === commands[key].fieldId)?.value;
     if (value !== undefined) capture.accepted(key, value); }
-});
+}, new IntervalController(new ExtensionIntervalClient()));
 runtime.ctrlEmLibraryController = { dispose: () => { autoSend.dispose(); unbindAuto(); uploads.dispose(); capture.dispose(); transfer?.dispose(); pickers.dispose(); editor.dispose(); shell.dispose(); } };
 shell.start();
 editor.start();

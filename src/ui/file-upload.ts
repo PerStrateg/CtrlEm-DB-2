@@ -4,12 +4,13 @@ import type { ProviderId, UploadType } from '../upload/providers';
 export interface UploadRow {
   id: string; fileName: string; provider: ProviderId; categoryId: string; categoryName: string;
   status: 'Waiting' | 'Uploading' | 'Saving' | 'Saved' | 'Failed' | 'Save failed';
-  url?: string; error?: string;
+  url?: string; error?: string; canRetry?: boolean;
 }
 interface UploadActions {
   files(files: File[]): void; retry(id: string): void; save(id: string): void;
   settings(initiator: HTMLElement): void; refresh(): void;
   clearCompleted(): void;
+  remove(id: string): void;
 }
 
 /** Uses CtrlEm's dropzone classes, without native IDs or upload routing attributes. */
@@ -74,7 +75,17 @@ export class FileUploadView {
       const button = (event.target as Element).closest<HTMLButtonElement>('button[data-id]');
       if (!button) return;
       if (button.dataset.action === 'retry') actions.retry(button.dataset.id!);
-      else actions.save(button.dataset.id!);
+      else if (button.dataset.action === 'save') actions.save(button.dataset.id!);
+      else if (button.dataset.action === 'remove') {
+        const item = button.closest('li')!;
+        const confirm = item.querySelector<HTMLElement>('[data-remove-confirm]')!;
+        if (button.dataset.confirm === 'true') { confirm.hidden = false; confirm.querySelector('button')!.focus(); }
+        else actions.remove(button.dataset.id!);
+      } else if (button.dataset.action === 'confirm-remove') actions.remove(button.dataset.id!);
+      else if (button.dataset.action === 'keep') {
+        button.closest<HTMLElement>('[data-remove-confirm]')!.hidden = true;
+        button.closest('li')!.querySelector<HTMLButtonElement>('[data-action=remove]')!.focus();
+      }
     });
   }
 
@@ -94,7 +105,11 @@ export class FileUploadView {
     this.rows.hidden = !rows.length;
     this.clearCompleted.hidden = !rows.some(row => row.status === 'Saved');
     const ids = new Set(rows.map(row => row.id));
-    for (const [id, element] of this.rowElements) if (!ids.has(id)) { element.remove(); this.rowElements.delete(id); }
+    let restoreFocus = false;
+    for (const [id, element] of this.rowElements) if (!ids.has(id)) {
+      restoreFocus ||= element.contains(this.document.activeElement);
+      element.remove(); this.rowElements.delete(id);
+    }
     for (const row of rows) {
       let item = this.rowElements.get(row.id);
       if (!item) {
@@ -104,16 +119,33 @@ export class FileUploadView {
         result.onclick = () => result.select();
         const retry = this.document.createElement('button'); retry.type = 'button'; retry.className = 'btn btn-secondary'; retry.dataset.action = 'retry'; retry.dataset.id = row.id; retry.textContent = 'Retry upload';
         const save = this.document.createElement('button'); save.type = 'button'; save.className = 'btn btn-secondary'; save.dataset.action = 'save'; save.dataset.id = row.id; save.textContent = 'Retry save';
-        item.append(caption, result, retry, save); this.rows.append(item); this.rowElements.set(row.id, item);
+        const remove = this.document.createElement('button'); remove.type = 'button'; remove.className = 'btn btn-secondary';
+        remove.dataset.action = 'remove'; remove.dataset.id = row.id;
+        const confirm = this.document.createElement('div'); confirm.dataset.removeConfirm = ''; confirm.hidden = true;
+        const warning = this.document.createElement('p'); warning.textContent = 'This link is not saved. Copy the URL above before removing this result. The uploaded file will remain at the provider.';
+        confirm.append(warning);
+        for (const [action, label] of [['confirm-remove', 'Remove result'], ['keep', 'Keep result']]) {
+          const button = this.document.createElement('button'); button.type = 'button'; button.dataset.action = action;
+          button.dataset.id = row.id; button.textContent = label!; confirm.append(button);
+        }
+        item.append(caption, result, retry, save, remove, confirm); this.rows.append(item); this.rowElements.set(row.id, item);
       }
       const text = `${row.fileName} · ${row.categoryName} · ${row.status}${row.error ? ` · ${row.error}` : ''}`;
       if (item.querySelector('p')!.textContent !== text) item.querySelector('p')!.textContent = text;
       const result = item.querySelector('input')!; result.hidden = !row.url || row.status === 'Saved';
       if (result.value !== (row.url ?? '')) result.value = row.url ?? '';
       const retry = item.querySelector<HTMLButtonElement>('[data-action=retry]')!;
-      retry.hidden = row.status !== 'Failed';
+      retry.hidden = row.status !== 'Failed' || row.canRetry === false;
       retry.disabled = loading || Boolean(error);
       item.querySelector<HTMLButtonElement>('[data-action=save]')!.hidden = row.status !== 'Save failed';
+      const remove = item.querySelector<HTMLButtonElement>('[data-action=remove]')!;
+      remove.hidden = !['Waiting', 'Failed', 'Save failed'].includes(row.status);
+      const removeLabel = row.status === 'Waiting' ? 'Cancel' : 'Remove';
+      if (remove.textContent !== removeLabel) remove.textContent = removeLabel;
+      remove.dataset.confirm = String(row.status === 'Save failed');
+      if (row.status !== 'Save failed') item.querySelector<HTMLElement>('[data-remove-confirm]')!.hidden = true;
     }
+    if (restoreFocus) (Array.from(this.rows.querySelectorAll<HTMLButtonElement>('button'))
+      .find(button => !button.disabled && !button.closest('[hidden]')) ?? this.browse).focus();
   }
 }

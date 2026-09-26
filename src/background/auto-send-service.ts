@@ -20,14 +20,53 @@ export class AutoSendError extends Error {}
 
 /** One serialized owner. Persist the execution token before any native side effect. */
 export class AutoSendService {
-  private readonly queue = new WriteQueue();
   private state: AutoState = emptyAutoState();
   private loaded = false;
   private fault = false;
   private preparing = false;
   private readyReceivers: string[] = [];
   constructor(private readonly repository: AutoSendRepository, private readonly library: LibraryRepository,
-    private readonly transport: AutoTransport, private readonly now = Date.now) {}
+    private readonly transport: AutoTransport, private readonly now = Date.now,
+    private readonly queue = new WriteQueue()) {}
+
+  /** Called under the shared library/dispatch queue; never enqueue recursively. */
+  async libraryChanged(): Promise<void> {
+    try {
+      await this.load();
+      const state = structuredClone(this.state);
+      if (await this.reconcileSources(state)) await this.commit(state);
+    } catch (error) {
+      this.fault = true; this.transport.wakeAt(undefined); this.transport.changed(undefined);
+      throw error;
+    }
+  }
+  private async reconcileSources(state: AutoState): Promise<boolean> {
+    const tasks = state.tasks.filter(task => task.command !== 'sendOrDelete' && task.categoryId !== 'default');
+    if (!tasks.length) return false;
+    const library = await this.library.read();
+    let changed = false;
+    for (const task of tasks) {
+      const category = library.categories.find(category => category.id === task.categoryId);
+      if (!category) {
+        if (task.execution) {
+          if (task.status !== 'stopping') { task.status = 'stopping'; changed = true; }
+        } else { state.tasks = state.tasks.filter(entry => entry !== task); changed = true; }
+        continue;
+      }
+      if (task.execution && !task.execution.sourceInvalidated && !category.items.some(item => item.id === task.execution!.itemId)) {
+        task.execution.sourceInvalidated = true; changed = true;
+      }
+      if (task.retryExecution && !category.items.some(item => item.id === task.retryExecution!.itemId)) {
+        delete task.retryExecution; task.retryCount = 0; delete task.failureCode;
+        task.nextItemId = task.highlightedItemId = nextAutoItem(task, category.items)?.id;
+        task.orderIds = category.items.map(item => item.id);
+        if (!category.items.length) this.pause(task, 'empty');
+        else if (task.reason === 'failed') { task.status = 'queued'; delete task.reason; }
+        changed = true;
+      }
+    }
+    return changed;
+  }
 
   private async load(): Promise<void> {
     if (this.loaded) return;
@@ -45,6 +84,7 @@ export class AutoSendService {
       state.sends = state.sends.filter(item => item !== send);
     }
     if (state.tasks.length || state.sends.length) this.readyReceivers = [...new Set((await this.transport.pages()).map(({ page }) => page.receiver))];
+    await this.reconcileSources(state);
     await this.commit(state);
     this.loaded = true;
   }
@@ -110,6 +150,7 @@ export class AutoSendService {
         recovered.nextAllowedAt = this.now() + autoSendLimits.minSeconds * 1000;
         await this.commit(recovered);
       }
+      await this.libraryChanged();
       const state = structuredClone(this.state);
       switch (request.type) {
         case 'auto:claim': return this.snapshot();
@@ -220,6 +261,7 @@ export class AutoSendService {
     const candidate = await this.queue.run(async () => {
       await this.load();
       if (this.fault || this.preparing) return;
+      await this.libraryChanged();
       if (this.state.acceptedRequests.some(request => request.expiresAt <= this.now())) await this.commit(structuredClone(this.state));
       const state = structuredClone(this.state), now = this.now();
       const running = this.entries(state).find(task => task.execution);
@@ -235,16 +277,16 @@ export class AutoSendService {
     });
     if (!candidate) return;
     // Keep Stop and manual Send responsive while asking a potentially slow tab.
-    let items: Item[] = [], reason: PauseReason | undefined;
+    let items: Item[] = [], reason: PauseReason | undefined, page: AutoPageState | undefined;
     try {
-      const page = await this.transport.probe(candidate.tabId);
+      page = await this.transport.probe(candidate.tabId);
       if (!page || page.receiver !== candidate.receiver || !page.nativeCommands.includes(command(candidate))) reason = 'unavailable';
       else if (!page.readyCommands.includes(command(candidate))) reason = 'busy';
-      else if (!manual(candidate) && !candidate.retryExecution) items = await this.items(candidate, page);
     } catch { reason = 'storage'; }
     await this.queue.run(async () => {
       this.preparing = false;
       if (this.fault) return;
+      await this.libraryChanged();
       const state = structuredClone(this.state), task = this.entries(state).find(task => task.id === candidate.id);
       if (!task || task.status !== 'queued' || task.tabId !== candidate.tabId ||
         this.availableAt(task, state) > this.now()) { this.schedule(); return; }
@@ -264,12 +306,16 @@ export class AutoSendService {
           parameters: task.parameters, selectionRevision: 0, deadline: this.now() + autoSendLimits.resultTimeoutMs };
         await this.dispatch(state, task); return;
       }
+      // Re-read after the probe while library writes and dispatch share the same queue.
+      items = await this.items(task, page!);
+      if (task.retryExecution && task.command !== 'sendOrDelete' && !items.some(item => item.id === task.retryExecution!.itemId)) {
+        delete task.retryExecution; task.retryCount = 0; delete task.failureCode;
+      }
       if (task.retryExecution) {
         task.status = 'running';
         task.execution = { ...task.retryExecution, token: crypto.randomUUID(), deadline: this.now() + autoSendLimits.resultTimeoutMs };
         await this.dispatch(state, task); return;
       }
-      task.categoryName = (candidate as AutoTask).categoryName;
       const item = nextAutoItem(task, items);
       if (task.command !== 'sendOrDelete' && !item) {
         this.pause(task, 'empty'); await this.commit(state); return;
@@ -305,7 +351,10 @@ export class AutoSendService {
       else state.tasks = state.tasks.filter(entry => entry !== task);
     };
     if (task.status === 'stopping') remove();
-    else if (outcome.status === 'success' || outcome.reason === 'unknown') {
+    else if (task.execution?.sourceInvalidated) {
+      if (outcome.status === 'paused' && outcome.reason === 'unknown') this.notice(state, task);
+      if (!manual(task)) this.advance(task, now);
+    } else if (outcome.status === 'success' || outcome.reason === 'unknown') {
       if (outcome.status !== 'success') this.notice(state, task);
       if (manual(task)) remove(); else this.advance(task, now);
     } else if (outcome.reason === 'failed' || outcome.reason === 'busy') {
@@ -324,6 +373,7 @@ export class AutoSendService {
       if (manual(task) && outcome.reason === 'failed') task.sequence = ++state.sequence;
     } else { task.failureCode = outcome.failureCode; this.pause(task, outcome.reason); }
     if (this.fault) for (const candidate of this.entries(state)) this.pause(candidate, 'storage');
+    await this.reconcileSources(state);
     await this.commit(state);
   }
 }

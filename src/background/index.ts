@@ -13,12 +13,17 @@ import { catboxAccess } from '../shared/provider-access';
 import { registerAutoSend } from './auto-send-runtime';
 import { registerImageCache } from './image-cache-runtime';
 import { imageCachePort } from '../shared/image-cache-protocol';
+import { IntervalRepository } from '../storage/interval-store';
+import { intervalRequestSchema } from '../shared/interval-protocol';
 
-registerAutoSend();
+const libraryQueue = new WriteQueue();
+const scheduler = registerAutoSend(libraryQueue);
 registerImageCache();
 
 const credentials = new CredentialsRepository(chrome.storage.local, openCredentialKey);
 const credentialsQueue = new WriteQueue();
+const intervals = new IntervalRepository(chrome.storage.local);
+const intervalsQueue = new WriteQueue();
 const uploadRequest = diagnosticUploadFetch(chrome.webRequest, chrome.runtime.getURL(''), fetch, chrome.permissions);
 
 const accessChanged = () => {
@@ -42,11 +47,22 @@ chrome.runtime.onConnect.addListener(port => {
 
 const service = new LibraryService(
   new LibraryRepository(chrome.storage.local), new EditorSessionRepository(chrome.storage.session),
-  new SelectionRepository(chrome.storage.local),
+  new SelectionRepository(chrome.storage.local), libraryQueue, () => scheduler.libraryChanged(),
 );
 
 // Register listeners synchronously for service-worker/event-page wakeups.
 chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
+  if ((message as { type?: string })?.type?.startsWith('interval:')) {
+    const parsed = intervalRequestSchema.safeParse(message);
+    if (authorizedTab(sender, chrome.runtime.id) === undefined || !parsed.success) {
+      respond({ ok: false, error: 'Request not allowed.' }); return false;
+    }
+    void intervalsQueue.run(async () => {
+      if (parsed.data.type === 'interval:save') await intervals.save(parsed.data.command, parsed.data.seconds);
+      else return intervals.read();
+    }).then(value => respond({ ok: true, value }), () => respond({ ok: false, error: 'Couldn’t save interval. Retry.' }));
+    return true;
+  }
   if ((message as { type?: string })?.type?.startsWith('image-cache:')) return false;
   if ((message as { type?: string })?.type?.startsWith('auto:')) return false;
   if (authorizedSettings(sender, chrome.runtime.id, chrome.runtime.getURL('settings.html'))) {

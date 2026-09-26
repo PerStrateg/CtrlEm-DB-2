@@ -33,6 +33,13 @@ export class AutoSendControl {
   readonly element: HTMLElement;
   readonly interval: HTMLInputElement;
   private readonly toggle: HTMLButtonElement;
+  private readonly preferenceMessage: HTMLElement;
+  private readonly preferenceRetry: HTMLButtonElement;
+  private preferenceReady = true;
+  private preferredSeconds = autoSendLimits.defaultSeconds;
+  private task?: AutoTask;
+  private pending?: string;
+  private connected = false;
   constructor(document: Document, key: AutoCommandKey, actions: { toggle(): void }) {
     this.element = document.createElement('div'); this.element.className = 'ctrlem-db-auto-control';
     this.interval = document.createElement('input'); this.interval.type = 'number';
@@ -44,14 +51,30 @@ export class AutoSendControl {
     this.toggle = button(document, 'A', actions.toggle);
     this.toggle.className = 'ctrlem-db-auto-toggle';
     this.element.append(this.interval, this.toggle);
+    const status = document.createElement('div'); status.className = 'ctrlem-db-interval-status'; status.hidden = true;
+    this.preferenceMessage = document.createElement('span'); this.preferenceMessage.setAttribute('role', 'status');
+    this.preferenceRetry = button(document, 'Retry', () => {}); this.preferenceRetry.hidden = true;
+    status.append(this.preferenceMessage, this.preferenceRetry); this.element.append(status);
+  }
+  preferred(seconds: number): void {
+    this.preferredSeconds = seconds;
+    if (!this.task) this.interval.value = String(seconds);
+  }
+  preferenceStatus(message: string, ready: boolean, retry?: () => void): void {
+    this.preferenceReady = ready; text(this.preferenceMessage, message);
+    this.preferenceMessage.parentElement!.hidden = !message;
+    this.preferenceRetry.hidden = !retry; this.preferenceRetry.onclick = retry ?? null;
+    this.render(this.task, this.pending, this.connected);
   }
   render(task: AutoTask | undefined, pending: string | undefined, connected: boolean): void {
+    if (this.task && !task) this.interval.value = String(this.preferredSeconds);
+    this.task = task; this.pending = pending; this.connected = connected;
     const action = pending ?? (task?.status === 'paused' && task.reason !== 'invalid' ? 'Resume auto-send' : task ? 'Stop auto-send' : 'Start auto-send');
     attribute(this.toggle, 'title', action); attribute(this.toggle, 'aria-label', action);
     attribute(this.toggle, 'aria-pressed', String(Boolean(task && task.status !== 'paused')));
     attribute(this.toggle, 'aria-busy', String(Boolean(pending || task?.status === 'stopping')));
-    flag(this.toggle, 'disabled', Boolean(pending) || task?.status === 'stopping' || !connected);
-    flag(this.interval, 'disabled', Boolean(task || pending));
+    flag(this.toggle, 'disabled', Boolean(pending) || task?.status === 'stopping' || !connected || (!task && !this.preferenceReady));
+    flag(this.interval, 'disabled', Boolean(task || pending) || !this.preferenceReady);
     if (task && this.interval.value !== String(task.intervalSeconds)) this.interval.value = String(task.intervalSeconds);
   }
 }

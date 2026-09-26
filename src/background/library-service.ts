@@ -11,13 +11,22 @@ export function authorizedTab(sender: chrome.runtime.MessageSender, extensionId:
 }
 
 export class LibraryService {
-  private readonly queue = new WriteQueue();
   constructor(private readonly library: LibraryRepository, private readonly sessions: EditorSessionRepository,
-    private readonly selections: SelectionRepository) {}
+    private readonly selections: SelectionRepository, private readonly queue = new WriteQueue(),
+    private readonly libraryChanged: () => Promise<void> = async () => {}) {}
 
   handle(tabId: number, input: unknown, receiver?: string): Promise<unknown> {
     const request = requestSchema.parse(input);
-    return this.queue.run(() => this.execute(tabId, request, receiver));
+    return this.queue.run(async () => {
+      const result = await this.execute(tabId, request, receiver);
+      if ((request.type === 'library:change' || request.type === 'library:import') &&
+          (result as { status: string }).status === 'saved') {
+        // A committed library must not be reported as failed because task storage failed.
+        // The scheduler publishes its fault and blocks dispatch until recovery.
+        await this.libraryChanged().catch(() => console.warn('[CtrlEm DB] Task sources could not be synchronized.'));
+      }
+      return result;
+    });
   }
   private async execute(tabId: number, request: LibraryRequest, receiver?: string): Promise<unknown> {
     switch (request.type) {

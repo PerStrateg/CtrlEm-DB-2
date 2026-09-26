@@ -30,7 +30,7 @@ export function bindAutoExecutor(page: AutoSendPage): () => void {
     void chrome.runtime.sendMessage({ type: 'auto:claim', token: message.execution.token }).then(async (reply: { ok: boolean; value?: AutoSnapshot }) => {
       const snapshot = reply.value;
       const allowed = reply.ok && snapshot && [...snapshot.tasks, ...snapshot.sends].some(entry =>
-        entry.status === 'running' && entry.execution?.token === message.execution.token);
+        entry.status === 'running' && !entry.execution?.sourceInvalidated && entry.execution?.token === message.execution.token);
       return allowed ? page.execute(message.execution) : { status: 'paused', reason: 'interrupted' };
     }).then(respond, () => respond({ status: 'paused', reason: 'unknown' }));
     return true;

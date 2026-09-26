@@ -1,4 +1,6 @@
-import { exportLibrary, libraryFileSchema, planImport } from '../model/library-file';
+import { exportLibrary, planImport } from '../model/library-file';
+import { LibraryImportError, readLibraryImport } from '../model/library-import';
+import type { ImportReview } from '../model/library-import';
 import type { ImportPlan, LibraryFile } from '../model/library-file';
 import type { ContentType, Library } from '../model/library';
 import type { LibraryClient, TransferClient } from '../shared/library-protocol';
@@ -10,7 +12,7 @@ export interface TransferEditor {
   lockTransfer(locked: boolean): Promise<void>;
   imported(library: Library, categoryIds: string[], replace: boolean): void;
 }
-interface PendingImport { file: LibraryFile; plan: ImportPlan; discardDrafts: boolean }
+interface PendingImport { file: LibraryFile; plan: ImportPlan; discardDrafts: boolean; review: ImportReview }
 export class TransferController {
   readonly view: LibraryTransferView;
   private pending?: PendingImport;
@@ -34,7 +36,7 @@ export class TransferController {
     if (this.busy || this.disposed) return;
     this.busy = true; this.refresh(); this.view.message('');
     try { await work(); }
-    catch { if (!this.disposed) this.view.message(error); }
+    catch (cause) { if (!this.disposed) this.view.message(cause instanceof LibraryImportError ? cause.message : error); }
     finally { this.busy = false; if (!this.disposed) this.refresh(); }
   }
   private async export(savedOnly: boolean): Promise<void> {
@@ -61,18 +63,17 @@ export class TransferController {
   private async readFile(file: File): Promise<void> {
     await this.run(async () => {
       this.pending = undefined; this.view.close(false);
-      const parsed = libraryFileSchema.safeParse(JSON.parse(await file.text()));
-      if (!parsed.success) { this.view.message('Invalid library file. Choose a CtrlEm DB version 1 JSON export.'); return; }
+      const parsed = readLibraryImport(JSON.parse(await file.text()));
       const loaded = await this.client.load();
       if (this.disposed) return;
-      this.pending = { file: parsed.data,
-        plan: planImport(loaded.library, parsed.data, 'replace'), discardDrafts: this.editor.transferState().hasDrafts };
+      this.pending = { file: parsed.file, review: parsed.review,
+        plan: planImport(loaded.library, parsed.file, 'replace'), discardDrafts: this.editor.transferState().hasDrafts };
       this.showPlan();
     }, 'Couldn’t read import. Choose a valid CtrlEm DB version 1 JSON file and try again.');
   }
   private showPlan(): void {
     const pending = this.pending!;
-    this.view.preview(pending.plan, pending.discardDrafts);
+    this.view.preview(pending.plan, pending.discardDrafts, pending.review);
   }
   private async confirm(): Promise<void> {
     await this.run(async () => {

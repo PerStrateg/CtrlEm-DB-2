@@ -7,11 +7,12 @@ import { autoRequestSchema } from '../shared/auto-send-protocol';
 import type { AutoPageState, AutoSnapshot } from '../shared/auto-send-protocol';
 import { receiverFromUrl, receiverUrl } from '../model/send-command';
 import { authorizedTab } from './library-service';
+import { WriteQueue } from '../storage/library-store';
 
 const alarmName = 'ctrlem.auto-send.wake';
 const recipient = receiverFromUrl;
 
-export function registerAutoSend(): void {
+export function registerAutoSend(queue: WriteQueue): AutoSendService {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let alarmAt: number | undefined;
   const tabs = () => chrome.tabs.query({ url: ['https://ctrlem.com/u/*', 'https://ctrlem.com/groups/*'] });
@@ -56,7 +57,7 @@ export function registerAutoSend(): void {
       // Alarms recover sleeping workers; the live timer handles sub-30-second intervals.
       void (time === undefined ? chrome.alarms.clear(alarmName) : chrome.alarms.create(alarmName, { when: time })).catch(failed);
     },
-  });
+  }, Date.now, queue);
   chrome.runtime.onMessage.addListener((input: unknown, sender, respond) => {
     if (!(input as { type?: string })?.type?.startsWith('auto:')) return false;
     const tabId = authorizedTab(sender, chrome.runtime.id), parsed = autoRequestSchema.safeParse(input);
@@ -74,4 +75,5 @@ export function registerAutoSend(): void {
   });
   // Session storage is cleared on extension reload/browser restart, not on worker sleep.
   void scheduler.tick().catch(failed);
+  return scheduler;
 }

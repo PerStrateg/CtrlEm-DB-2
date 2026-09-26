@@ -19,6 +19,7 @@ export const pauseReasons = {
 } as const;
 export type PauseReason = keyof typeof pauseReasons;
 export interface AutoExecution {
+  sourceInvalidated?: boolean;
   token: string; receiver: string; command: string; value?: string; deadline: number;
   parameters?: SendCommand;
   itemId?: string; selectionRevision: number;

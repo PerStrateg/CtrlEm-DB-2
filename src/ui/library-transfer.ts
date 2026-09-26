@@ -1,5 +1,6 @@
 import { typeLabels } from '../model/library';
 import type { ImportPlan } from '../model/library-file';
+import type { ImportReview } from '../model/library-import';
 
 interface TransferActions {
   export(): void;
@@ -68,17 +69,28 @@ export class LibraryTransferView {
   private paragraph(text: string): HTMLParagraphElement {
     const p = this.document.createElement('p'); p.textContent = text; return p;
   }
-  preview(plan: ImportPlan, drafts: boolean): void {
+  preview(plan: ImportPlan, drafts: boolean, review?: ImportReview): void {
     this.panel.replaceChildren(this.paragraph(`${plan.categories.length} categories, ${plan.categories.reduce((count, category) => count + category.items.length, 0)} items`));
     const list = this.document.createElement('ul');
     for (const category of plan.categories) {
       const li = this.document.createElement('li'); li.textContent = `${typeLabels[category.type]}: ${category.name} (${category.items.length})`; list.append(li);
     }
     this.panel.append(list);
+    if (review?.legacy) {
+      this.panel.append(this.paragraph(`Userscript import: ${review.originalItems} original entries. Settings are not imported.`));
+      for (const warning of review.warnings) this.panel.append(this.paragraph(warning));
+      if (review.exclusions.length) {
+        this.panel.append(this.paragraph(`${review.exclusions.length} entries will be skipped:`));
+        const exclusions = this.document.createElement('ul');
+        for (const value of review.exclusions) { const item = this.document.createElement('li'); item.textContent = value; exclusions.append(item); }
+        this.panel.append(exclusions);
+      }
+    }
     for (const warning of plan.warnings) this.panel.append(this.paragraph(warning));
     this.panel.append(this.paragraph('This replaces all saved categories. Other extension settings are kept.'));
     if (drafts) this.panel.append(this.paragraph('Unsaved drafts in this tab will be discarded. Drafts in other tabs will remain as conflicts.'));
-    this.panel.append(this.button('confirm', drafts ? 'Discard drafts and replace' : 'Replace DB'), this.button('cancel', 'Cancel'));
+    const label = drafts ? 'Discard drafts and replace' : 'Replace DB';
+    this.panel.append(this.button('confirm', review?.exclusions.length ? `Skip ${review.exclusions.length} entries and ${label.toLowerCase()}` : label), this.button('cancel', 'Cancel'));
     this.panel.hidden = false;
   }
   unsaved(): void {

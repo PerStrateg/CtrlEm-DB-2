@@ -91,6 +91,16 @@ export class UploadController {
             const current = this.states.get(field.key)!;
             current.rows = current.rows.filter(row => row.status !== 'Saved'); this.render();
           },
+          remove: id => {
+            const current = this.states.get(field.key)!;
+            const row = current.rows.find(row => row.id === id);
+            if (!row || !['Waiting', 'Failed', 'Save failed'].includes(row.status)) return;
+            for (let index = this.pending.length - 1; index >= 0; index--) {
+              if (this.pending[index]!.row === row) this.pending.splice(index, 1);
+            }
+            delete row.file;
+            current.rows = current.rows.filter(candidate => candidate !== row); this.render();
+          },
         });
         state = { key: field.key as UploadCommand, field, view, rows: [], fieldVersion: 0 };
         this.states.set(field.key, state);
@@ -124,7 +134,7 @@ export class UploadController {
     const provider = providerForType[state.view.type];
     for (const file of files) {
       const error = uploadFileError(provider, state.view.type, file);
-      const row: UploadJob = { id: crypto.randomUUID(), file, fileName: file.name, provider, categoryId: context.category.id,
+      const row: UploadJob = { id: crypto.randomUUID(), ...(error ? {} : { file }), canRetry: !error, fileName: file.name, provider, categoryId: context.category.id,
         categoryName: context.category.name, status: error ? 'Failed' : 'Waiting', error,
         fieldVersion: state.fieldVersion, fieldValue: state.field.input.value };
       state.rows.push(row);

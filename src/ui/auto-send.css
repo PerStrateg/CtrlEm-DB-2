@@ -1,5 +1,7 @@
 .ctrlem-db-send-row { display: grid; grid-template-columns: minmax(0, 1fr) 64px 36px; align-items: center; gap: 6px; min-width: 0; }
 .ctrlem-db-auto-control { display: contents; }
+.ctrlem-db-interval-status { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; font-size: .75rem; color: var(--text-secondary); }
+.ctrlem-db-interval-status[hidden] { display: none; }
 .ctrlem-db-send-row > .ctrlem-db-queued-send, .ctrlem-db-auto-control > :is(input, button) { height: 36px; min-height: 36px; margin: 0; box-sizing: border-box; min-width: 0; width: 100%; padding: 0 8px; }
 .ctrlem-db-auto-control input { text-align: center; padding: 0 3px; }
 .ctrlem-db-auto-control .ctrlem-db-auto-toggle { padding: 0; font-weight: 600; }

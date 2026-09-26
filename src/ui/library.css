@@ -70,3 +70,9 @@
 .ctrlem-db-database { padding: 0 20px 16px; border-bottom: 1px solid var(--border-color); }
 .ctrlem-db-database h3 { margin: 8px 0; font-size: 1rem; }
 .ctrlem-db-database p { color: var(--text-secondary); font-size: .85rem; }
+.ctrlem-db-help { padding: 0 20px 20px; font-size: .9rem; line-height: 1.5; }
+.ctrlem-db-help h3 { margin: 8px 0; }
+.ctrlem-db-help details { padding: 10px 0; border-top: 1px solid var(--border-color); }
+.ctrlem-db-help summary { cursor: pointer; font-weight: 600; }
+.ctrlem-db-help summary:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 3px; }
+.ctrlem-db-help p { color: var(--text-secondary); }
