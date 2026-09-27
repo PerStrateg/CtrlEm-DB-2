@@ -156,7 +156,7 @@ export class ContentPickerView {
       if (state.canDeleteItems) {
         if (!remove) {
           remove = this.document.createElement('button'); remove.type = 'button';
-          remove.className = 'ctrlem-db-picker-delete'; remove.dataset.deleteId = item.id;
+          remove.className = 'ctrlem-db-picker-delete ctrlem-db-remove-button'; remove.dataset.deleteId = item.id;
           remove.textContent = '×'; card.append(remove);
         }
         remove.setAttribute('aria-label', state.image ? 'Delete image' : `Delete ${label}`);

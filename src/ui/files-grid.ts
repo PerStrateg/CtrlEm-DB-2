@@ -118,7 +118,7 @@ export class FilesGrid {
         const wrapper = this.doc.createElement('div'); wrapper.className = 'ctrlem-db-files-item';
         const element = this.doc.createElement('button'); element.type = 'button'; element.className = 'ctrlem-db-files-card';
         element.dataset.index = String(i); element.setAttribute('aria-label', `Image ${i + 1}`);
-        const remove = this.doc.createElement('button'); remove.type = 'button'; remove.className = 'ctrlem-db-files-remove';
+        const remove = this.doc.createElement('button'); remove.type = 'button'; remove.className = 'ctrlem-db-files-remove ctrlem-db-remove-button';
         remove.textContent = '×'; remove.setAttribute('aria-label', `Remove image ${i + 1} from Local Upload`);
         remove.title = 'Remove from Local Upload';
         remove.addEventListener('click', () => this.remove(item.id));

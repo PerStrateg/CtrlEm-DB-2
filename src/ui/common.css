@@ -27,6 +27,9 @@
 .ctrlem-db-ui :where([role='status']) { font-size: .8rem; overflow-wrap: anywhere; }
 .ctrlem-db-ui :where([role='status']):empty { display: none; }
 
+.ctrlem-db-remove-button { display: grid; place-items: center; box-sizing: border-box; width: 18px; height: 18px; min-height: 0; padding: 0; border: 0; border-radius: 50%; background: color-mix(in srgb, var(--bg-tertiary) 88%, var(--text-primary)); color: var(--text-secondary); font-size: 12px; line-height: 1; opacity: .82; }
+.ctrlem-db-remove-button:hover, .ctrlem-db-remove-button:focus-visible { color: var(--text-primary); opacity: 1; }
+
 .ctrlem-db-ui input[type='number'] { -moz-appearance: textfield; appearance: textfield; }
 .ctrlem-db-ui input[type='number']::-webkit-inner-spin-button,
 .ctrlem-db-ui input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }

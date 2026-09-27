@@ -3,6 +3,8 @@
 .ctrlem-db-preview p { margin: 8px 0; }
 .ctrlem-db-preview button + button { margin-left: 8px; }
 .ctrlem-db-picker-card:has(> .ctrlem-db-picker-preview) { display: flex; align-items: stretch; gap: 4px; }
+.ctrlem-db-picker-items:not(.ctrlem-db-picker-grid) .ctrlem-db-picker-card:has(> .ctrlem-db-picker-preview) { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+.ctrlem-db-picker-items:not(.ctrlem-db-picker-grid) .ctrlem-db-picker-preview { grid-column: 2; grid-row: 1; }
 .ctrlem-db-picker-card > .ctrlem-db-picker-preview { flex: 0 0 auto; font-size: 11px; padding: 3px; }
 .ctrlem-db-picker-grid .ctrlem-db-picker-card:has(> .ctrlem-db-picker-preview) { flex-direction: column; }
 .ctrlem-db-picker-grid .ctrlem-db-picker-preview { width: 64px; }
