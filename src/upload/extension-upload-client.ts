@@ -37,7 +37,7 @@ export class ExtensionUploadClient implements UploadClient {
 
   async upload(provider: ProviderId, media: UploadType, file: File, signal: AbortSignal): Promise<string> {
     const started = performance.now();
-    const diagnostic = { provider, bytes: file.size, mime: diagnosticMime(file.type) };
+    const diagnostic = { provider, bytes: file.size, mime: diagnosticMime(file.type), filename: file.name };
     recordDiagnostic('upload', { ...diagnostic, outcome: 'start' });
     const port = chrome.runtime.connect({ name: uploadPortName });
     let pending: { resolve(value: UploadReply): void; reject(error: Error): void } | undefined;
@@ -71,7 +71,7 @@ export class ExtensionUploadClient implements UploadClient {
         await send({ type: 'chunk', data });
       }
       const url = (await send({ type: 'finish' })).url!;
-      recordDiagnostic('upload', { ...diagnostic, outcome: 'success', durationMs: Math.round(performance.now() - started) });
+      recordDiagnostic('upload', { ...diagnostic, outcome: 'success', mediaUrl: url, durationMs: Math.round(performance.now() - started) });
       return url;
     } catch (error) {
       const failure = error instanceof UploadError ? error.failure : undefined;

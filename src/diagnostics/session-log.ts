@@ -10,10 +10,14 @@ const codes = ['unknown', 'network', 'http', 'invalid-response', 'interrupted', 
   'timeout', 'permission', 'quota', 'validation', 'decode', 'rate-limit', 'image-body-decode', 'image-body-read', 'stream-error', 'site-rejected'] as const;
 const number = z.number().finite().nonnegative().optional();
 const browserErrorPattern = /^(?:NS_ERROR_[A-Z0-9_]+|net::ERR_[A-Z0-9_]+)$/;
-// Only enums, browser symbolic codes, numbers and booleans cross this boundary. No arbitrary error text,
-// filenames, library contents, recipient IDs, media URLs or credentials are retained.
+const utf8Encoder = new TextEncoder();
+const byteSize = (value: string): number => Math.max(value.length * 2, utf8Encoder.encode(value).byteLength);
+// Only approved diagnostic fields cross this boundary. Arbitrary error text,
+// library contents, recipient IDs and credentials are never retained.
 const detailsSchema = z.object({
   outcome: z.enum(['start', 'success', 'failed', 'paused', 'cancelled', 'conflict']).optional(),
+  message: z.string().max(10000).optional(), filename: z.string().max(1024).optional(),
+  mediaUrl: z.string().max(4096).optional(),
   durationMs: number, bytes: number, inputBytes: number, outputBytes: number, count: number,
   width: number, height: number, frames: number, status: number, retryAfterMs: number,
   command: z.enum(commands).optional(), mime: z.enum(mimes).optional(),
@@ -47,16 +51,15 @@ export class SessionLog {
   constructor(private readonly environment: DiagnosticEnvironment, private readonly maxBytes = diagnosticLimits.maxBytes) {}
 
   record(event: DiagnosticEvent, details: DiagnosticDetails = {}): void {
-    const parsed = detailsSchema.safeParse(details);
+    const safeDetails = details.message === undefined ? details : { ...details, message: '*'.repeat(details.message.length) };
+    const parsed = detailsSchema.safeParse(safeDetails);
     if (!parsed.success || !events.includes(event)) return;
     const line = `${JSON.stringify({ at: new Date().toISOString(), event, ...parsed.data })}\n`;
-    // All accepted values are ASCII. Account for UTF-16 backing storage too;
-    // export itself is smaller than the memory budget, including its header.
-    const bytes = line.length * 2;
+    const bytes = byteSize(line);
     const budget = this.maxBytes - diagnosticLimits.headerBytes;
     if (bytes > budget) { this.dropped++; return; }
     while (this.count && (this.retainedBytes + bytes > budget || this.count === this.entries.length)) {
-      this.retainedBytes -= this.entries[this.head]!.length * 2;
+      this.retainedBytes -= byteSize(this.entries[this.head]!);
       this.entries[this.head] = undefined;
       this.head = (this.head + 1) % this.entries.length;
       this.count--; this.dropped++;

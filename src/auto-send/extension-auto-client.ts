@@ -3,6 +3,16 @@ import { AutoConnectionError } from '../shared/auto-send-protocol';
 import type { AutoExecution, AutoOutcome } from '../model/auto-send';
 import type { AutoSendPage } from '../site/auto-send-page';
 import { classifyDiagnosticError, diagnosticCommand, recordDiagnostic } from '../diagnostics/session-log';
+import { commands } from '../model/commands';
+
+function executionDiagnostic(command: string, execution: AutoExecution) {
+  const fieldId = command in commands ? commands[command as keyof typeof commands].fieldId : undefined;
+  const fieldValue = execution.parameters?.fields.find(field => field.id === fieldId)?.value;
+  const value = execution.value ?? fieldValue;
+  if (command === 'sendMessage' || command === 'writeForMe') return { message: value };
+  if (['popupImage', 'changeWallpaper', 'popupSound', 'videoOverlay'].includes(command)) return { mediaUrl: value };
+  return {};
+}
 
 export class ExtensionAutoClient implements AutoClient {
   async request(request: AutoRequest): Promise<AutoSnapshot> {
@@ -41,7 +51,8 @@ export function bindAutoExecutor(page: AutoSendPage): () => void {
     if (message.type !== 'auto:execute') return false;
     const started = performance.now();
     const command = diagnosticCommand(message.execution.command);
-    recordDiagnostic('auto.execute', { command, outcome: 'start' });
+    const diagnostic = executionDiagnostic(message.execution.command, message.execution);
+    recordDiagnostic('auto.execute', { command, ...diagnostic, outcome: 'start' });
     void chrome.runtime.sendMessage({ type: 'auto:claim', token: message.execution.token }).then(async (reply: { ok: boolean; value?: AutoSnapshot }): Promise<AutoOutcome> => {
       const snapshot = reply.value;
       const allowed = reply.ok && snapshot && [...snapshot.tasks, ...snapshot.sends].some(entry =>
@@ -49,13 +60,13 @@ export function bindAutoExecutor(page: AutoSendPage): () => void {
       return allowed ? page.execute(message.execution) : { status: 'paused', reason: 'interrupted' };
     }).then(outcome => {
       recordDiagnostic('auto.execute', { command, outcome: outcome.status === 'success' ? 'success' : 'paused',
-        durationMs: Math.round(performance.now() - started),
+        ...diagnostic, durationMs: Math.round(performance.now() - started),
         reason: outcome.status === 'paused' ? outcome.reason : undefined,
         failureCode: outcome.status === 'paused' ? outcome.failureCode : undefined,
         retryAfterMs: outcome.status === 'paused' ? outcome.retryAfterMs : undefined });
       respond(outcome);
     }, error => {
-      recordDiagnostic('auto.execute', { command, outcome: 'failed', code: classifyDiagnosticError(error), durationMs: Math.round(performance.now() - started) });
+      recordDiagnostic('auto.execute', { command, ...diagnostic, outcome: 'failed', code: classifyDiagnosticError(error), durationMs: Math.round(performance.now() - started) });
       respond({ status: 'paused', reason: 'unknown' });
     });
     return true;

@@ -150,7 +150,9 @@ export class FilesController {
       const initial = await readFiles();
       for (let i = 0; i < sorted.length; i++) {
         if (sequence !== this.importGeneration || this.disposed) break;
-        const { file, path } = sorted[i]!; this.ui.message(`Importing ${i + 1} of ${sorted.length}…`);
+        const { file, path } = sorted[i]!;
+        recordDiagnostic('files.import', { outcome: 'start', filename: file.name });
+        this.ui.message(`Importing ${i + 1} of ${sorted.length}…`);
         await this.client.put(file, { id: '', generation: initial.generation, part: 'original', name: file.name, path });
       }
       if (sequence === this.importGeneration) this.ui.message(sorted.length ? '' : 'Choose JPG, PNG, GIF, WebP, BMP, AVIF or TIFF images.');

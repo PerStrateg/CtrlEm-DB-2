@@ -107,11 +107,13 @@ export class FilesService implements FilesSource {
   }
   resolve(id: string, signal: AbortSignal, tabId: number): Promise<string> {
     const startedAt = performance.now();
-    reportTabDiagnostic(tabId, 'files.prepare', { outcome: 'start', stage: 'upload' });
+    let filename: string | undefined;
     return this.uploadsQueue.run(async () => {
       signal.throwIfAborted();
       const state = await this.repository.read(), item = state.items.find(item => item.id === id);
       if (!item) throw new Error('File no longer available.');
+      filename = item.name;
+      reportTabDiagnostic(tabId, 'files.prepare', { outcome: 'start', stage: 'upload', filename });
       let uploads = await this.native.listUploads(signal);
       const existing = uploads.find(upload => upload.id === item.uploadId);
       if (existing) return `https://ctrlem.com${existing.url}`;
@@ -137,10 +139,10 @@ export class FilesService implements FilesSource {
       }));
       this.changed(); return `https://ctrlem.com${uploaded.url}`;
     }).then(url => {
-      reportTabDiagnostic(tabId, 'files.prepare', { outcome: 'success', stage: 'upload', durationMs: performance.now() - startedAt });
+      reportTabDiagnostic(tabId, 'files.prepare', { outcome: 'success', stage: 'upload', filename, mediaUrl: url, durationMs: performance.now() - startedAt });
       return url;
     }, error => {
-      reportTabDiagnostic(tabId, 'files.prepare', { outcome: signal.aborted ? 'cancelled' : 'failed', stage: 'upload', durationMs: performance.now() - startedAt, code: classifyDiagnosticError(error) });
+      reportTabDiagnostic(tabId, 'files.prepare', { outcome: signal.aborted ? 'cancelled' : 'failed', stage: 'upload', filename, durationMs: performance.now() - startedAt, code: classifyDiagnosticError(error) });
       throw error;
     });
   }
