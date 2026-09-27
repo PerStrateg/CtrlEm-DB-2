@@ -51,6 +51,7 @@ export function createHelpAbout(document: Document, version: string): HTMLElemen
     ]],
     ['Library backups', [
       'Settings → Export DB downloads your categories and items in version 3 format. Import DB accepts CtrlEm DB versions 3 and 1, and old userscript versions 1 and 2.',
+      'New installations start with a bundled library. Settings → Restore Defaults previews that same library and replaces all your categories after confirmation. Export DB first to keep your current library. Settings, intervals and FL files are kept.',
       'Review the import before choosing Replace DB. Replacement removes the current saved categories and stops their auto-send tasks. Export a backup first if you want to keep them. Upload account settings and intervals are kept.',
     ]],
     ['Image storage', [
@@ -70,6 +71,6 @@ export function createHelpAbout(document: Document, version: string): HTMLElemen
     section.append(details);
   }
   const about = document.createElement('footer'); about.className = 'ctrlem-db-about';
-  about.textContent = `CtrlEm DB · Version ${version} · By Strateg`; section.append(about);
+  about.textContent = `Ctrlem DB · Version ${version} · By Strateg`; section.append(about);
   return section;
 }

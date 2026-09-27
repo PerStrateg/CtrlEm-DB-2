@@ -5,6 +5,7 @@ import type { ImportPlan, LibraryFile } from '../model/library-file';
 import type { ContentType, Library } from '../model/library';
 import type { LibraryClient, TransferClient } from '../shared/library-protocol';
 import { LibraryTransferView } from '../ui/library-transfer';
+import { defaultLibraryFile } from '../model/default-library';
 
 export interface TransferEditor {
   transferState(): { library: Library; categoryId?: string; type: ContentType; hasDrafts: boolean; available: boolean };
@@ -12,7 +13,7 @@ export interface TransferEditor {
   lockTransfer(locked: boolean): Promise<void>;
   imported(library: Library, categoryIds: string[], replace: boolean): void;
 }
-interface PendingImport { file: LibraryFile; plan: ImportPlan; discardDrafts: boolean; review: ImportReview }
+interface PendingImport { file: LibraryFile; plan: ImportPlan; discardDrafts: boolean; review?: ImportReview; defaults: boolean }
 export class TransferController {
   readonly view: LibraryTransferView;
   private pending?: PendingImport;
@@ -22,6 +23,7 @@ export class TransferController {
     this.view = new LibraryTransferView(container.ownerDocument, {
       export: () => { void this.export(false); },
       file: file => { void this.readFile(file); },
+      restoreDefaults: () => { void this.restoreDefaults(); },
       confirm: () => { void this.confirm(); }, cancel: () => { this.pending = undefined; this.view.close(); this.view.message(''); },
       retrySave: () => { void this.export(false); }, exportSaved: () => { void this.export(true); },
     });
@@ -64,16 +66,25 @@ export class TransferController {
     await this.run(async () => {
       this.pending = undefined; this.view.close(false);
       const parsed = readLibraryImport(JSON.parse(await file.text()));
-      const loaded = await this.client.load();
-      if (this.disposed) return;
-      this.pending = { file: parsed.file, review: parsed.review,
-        plan: planImport(loaded.library, parsed.file, 'replace'), discardDrafts: this.editor.transferState().hasDrafts };
-      this.showPlan();
+      await this.prepare(parsed.file, false, parsed.review);
     }, 'Couldn’t read import. Choose a valid CtrlEm DB export (version 3 or 1) or userscript export (version 1 or 2) and try again.');
+  }
+  private async restoreDefaults(): Promise<void> {
+    await this.run(async () => {
+      this.pending = undefined; this.view.close(false);
+      await this.prepare(defaultLibraryFile, true);
+    }, 'Couldn’t load defaults. Retry Restore Defaults.');
+  }
+  private async prepare(file: LibraryFile, defaults: boolean, review?: ImportReview): Promise<void> {
+    const loaded = await this.client.load();
+    if (this.disposed) return;
+    this.pending = { file, defaults, review, plan: planImport(loaded.library, file, 'replace'),
+      discardDrafts: this.editor.transferState().hasDrafts };
+    this.showPlan();
   }
   private showPlan(): void {
     const pending = this.pending!;
-    this.view.preview(pending.plan, pending.discardDrafts, pending.review);
+    this.view.preview(pending.plan, pending.discardDrafts, pending.review, pending.defaults);
   }
   private async confirm(): Promise<void> {
     await this.run(async () => {
@@ -90,9 +101,10 @@ export class TransferController {
           this.showPlan(); this.view.message('Library changed. Review the updated names and confirm again.'); return;
         }
         this.editor.imported(result.library, result.categoryIds, true);
-        this.pending = undefined; this.view.close(); this.view.message('Imported.');
+        this.pending = undefined; this.view.close(); this.view.message(pending.defaults ? 'Defaults restored.' : 'Imported.');
       } finally { await this.editor.lockTransfer(false); }
-    }, 'Couldn’t import. Nothing was imported. Retry the confirmation or Cancel.');
+    }, this.pending?.defaults ? 'Couldn’t restore defaults. Retry the confirmation or Cancel.'
+      : 'Couldn’t import. Nothing was imported. Retry the confirmation or Cancel.');
   }
   dispose(): void { this.disposed = true; this.view.element.remove(); }
 }

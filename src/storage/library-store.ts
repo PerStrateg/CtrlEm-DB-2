@@ -1,4 +1,5 @@
-import { applyChange, emptyLibrary } from '../model/library';
+import { applyChange } from '../model/library';
+import { createDefaultLibrary } from '../model/default-library';
 import type { ChangeResult, Library, LibraryChange } from '../model/library';
 import { emptySession, librarySchema, sessionSchema } from '../shared/library-protocol';
 import type { EditorSession } from '../shared/library-protocol';
@@ -23,7 +24,12 @@ export class LibraryRepository {
   constructor(private readonly storage: StorageArea) {}
   async read(): Promise<Library> {
     const data = (await this.storage.get(libraryKey))[libraryKey];
-    if (data === undefined) return emptyLibrary();
+    if (data === undefined) {
+      // Background callers share the library write queue, including this first read.
+      const library = createDefaultLibrary();
+      await this.storage.set({ [libraryKey]: library });
+      return library;
+    }
     const parsed = librarySchema.safeParse(data);
     if (!parsed.success) throw new LibraryReadError('Unsupported or damaged library. Stored data has not been changed.');
     return parsed.data;

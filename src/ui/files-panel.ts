@@ -62,8 +62,8 @@ export class FilesPanel {
     this.confirmation.append(confirmationText, confirmationActions);
     this.status = doc.createElement('p'); this.status.className = 'ctrlem-db-files-status'; this.status.setAttribute('role', 'status'); this.status.hidden = true;
     this.empty = doc.createElement('p'); this.empty.className = 'ctrlem-db-files-empty';
-    this.empty.textContent = 'Click Add files/folder. JPG, PNG, GIF, WebP. Large files resize automatically.';
-    this.empty.append(doc.createElement('br'), 'Temporary files aren’t added to the library due to CtrlEm limitations.');
+    this.empty.textContent = 'Send last 20 files as ctrlem links. \nClick Add files/folder. JPG, PNG, GIF, WebP. Large files resize automatically.';
+    this.empty.append(doc.createElement('br'), 'Files here aren’t added to the library due to CtrlEm limitations.');
     this.grid = new FilesGrid(doc, actions.select);
     this.element.append(bar, this.confirmation, sendBar, this.empty, this.grid.element, this.status);
     this.element.addEventListener('keydown', event => { if (event.key === 'Escape') { event.stopPropagation(); actions.close(); } });

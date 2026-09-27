@@ -30,7 +30,7 @@ export class LibraryShell {
     this.heading = document.createElement('h2'); this.heading.id = `${libraryRegionId}-title`; this.heading.tabIndex = -1;
     const author = document.createElement('a'); author.textContent = 'Strateg';
     author.href = 'https://ctrlem.com/u/KPD0M'; author.target = '_blank'; author.rel = 'noopener noreferrer';
-    this.heading.append('CtrlEm DB by ', author);
+    this.heading.append('Ctrlem DB by ', author);
     const description = document.createElement('p'); description.textContent = 'Edit links, text, images, sounds, and videos.';
     header.append(this.heading, description);
     const navigation = document.createElement('nav'); navigation.setAttribute('aria-label', 'Library sections');
