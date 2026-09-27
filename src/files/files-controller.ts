@@ -9,6 +9,7 @@ import { ExtensionAutoClient } from '../auto-send/extension-auto-client';
 import type { AutoSnapshot } from '../shared/auto-send-protocol';
 import type { AutoTask } from '../model/auto-send';
 import type { AutoSendPage } from '../site/auto-send-page';
+import type { ImportFile } from './import-files';
 
 export class FilesController {
   private readonly ui: FilesPanel;
@@ -34,7 +35,7 @@ export class FilesController {
     this.ui = new FilesPanel(page.document, {
       toggle: () => results.select(this.open ? 'site' : 'files'),
       close: () => { results.select('site'); this.ui.button.focus({ preventScroll: true }); },
-      add: files => { void this.import(files); }, clear: () => { void this.clear(); },
+      add: files => this.import(files), clear: () => { void this.clear(); },
       select: id => { void this.select(id); }, previews: value => { void this.preference({ previews: value }); },
       interval: value => { void this.preference({ interval: value }); },
       send: () => { void this.send(); }, auto: () => { void this.toggleAuto(); },
@@ -95,7 +96,7 @@ export class FilesController {
     if (!this.disposed) this.ui.render({ ...this.state, selected: this.selection() }, this.open, this.task, this.importing);
   }
   private error(error: unknown): void {
-    if (!this.disposed) this.ui.message(error instanceof Error ? error.message : 'Files operation failed. Try again.');
+    if (!this.disposed) this.ui.message(error instanceof Error ? error.message : 'Local Upload operation failed. Try again.');
   }
   private async refresh(): Promise<void> {
     try { this.state = await readFiles(); this.render(); } catch (error) { this.error(error); }
@@ -123,18 +124,18 @@ export class FilesController {
     if (this.pendingSelection === id) this.pendingSelection = undefined;
     this.render();
   }
-  private async import(files: File[]): Promise<void> {
+  private async import(files: ImportFile[]): Promise<void> {
     if (this.importing || !files.length) return;
     const sequence = ++this.importGeneration;
-    const sorted = files.filter(file => /\.(jpe?g|png|gif|webp|bmp|avif|tiff?)$/i.test(file.name))
-      .sort((a, b) => (a.webkitRelativePath || a.name).localeCompare(b.webkitRelativePath || b.name, undefined, { numeric: true }));
+    const sorted = files.filter(({ file }) => /\.(jpe?g|png|gif|webp|bmp|avif|tiff?)$/i.test(file.name))
+      .sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true }));
     this.importing = true; this.render();
     try {
       const initial = await readFiles();
       for (let i = 0; i < sorted.length; i++) {
         if (sequence !== this.importGeneration || this.disposed) break;
-        const file = sorted[i]!; this.ui.message(`Importing ${i + 1} of ${sorted.length}…`);
-        await this.client.put(file, { id: '', generation: initial.generation, part: 'original', name: file.name, path: file.webkitRelativePath || file.name });
+        const { file, path } = sorted[i]!; this.ui.message(`Importing ${i + 1} of ${sorted.length}…`);
+        await this.client.put(file, { id: '', generation: initial.generation, part: 'original', name: file.name, path });
       }
       if (sequence === this.importGeneration) this.ui.message(sorted.length ? '' : 'Choose JPG, PNG, GIF, WebP, BMP, AVIF or TIFF images.');
       await this.refresh();
@@ -148,7 +149,7 @@ export class FilesController {
   }
   private async send(): Promise<void> {
     try {
-      const parameters = this.sender.native.capture('popupImage', false); parameters.label = 'Popup Image · Files';
+      const parameters = this.sender.native.capture('popupImage', false); parameters.label = 'Popup Image · Local Upload';
       this.accept(await this.auto.request({ type: 'auto:enqueue', id: crypto.randomUUID(), createdAt: Date.now(), parameters,
         source: 'files', fileId: this.selection() })); this.ui.message('');
     } catch (error) { this.error(error); }

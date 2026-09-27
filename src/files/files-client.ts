@@ -6,7 +6,7 @@ import type { filesRequest } from '../shared/files-protocol';
 
 export async function filesRequestValue<T>(request: z.infer<typeof filesRequest>): Promise<T> {
   const reply = await chrome.runtime.sendMessage(request);
-  if (!reply?.ok) throw new Error(reply?.error ?? 'Files unavailable. Reload the page.');
+  if (!reply?.ok) throw new Error(reply?.error ?? 'Local Upload unavailable. Reload the page.');
   return reply.value;
 }
 export const readFiles = () => filesRequestValue<FilesSnapshot>({ type: 'files:list' });

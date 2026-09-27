@@ -123,7 +123,7 @@ export class AutoTaskPanel {
   render(snapshot: AutoSnapshot, connected: boolean, pending: ReadonlyMap<string, string>, error?: string): void {
     const now = Date.now(), times = projectedSendTimes(snapshot, now);
     const entries = orderedQueue(snapshot, now).map(entry => isManualSend(entry)
-      ? { ...entry, manual: true, label: entry.parameters.label, source: entry.source === 'files' ? 'Files · Manual' : `Manual · ${entry.parameters.fields.find(field => field.value)?.value ?? ''}` }
+      ? { ...entry, manual: true, label: entry.parameters.label, source: entry.source === 'files' ? 'Local Upload · Manual' : `Manual · ${entry.parameters.fields.find(field => field.value)?.value ?? ''}` }
       : { ...entry, manual: false, label: autoCommandLabel(entry.command), source: `${entry.categoryName} · Auto · ${entry.intervalSeconds} sec` });
     const panelHadFocus = this.element.contains(this.document.activeElement);
     flag(this.element, 'hidden', !entries.length && !snapshot.notices.length && !error);

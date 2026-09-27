@@ -188,12 +188,12 @@ export class AutoSendService {
         }
         case 'auto:start': {
           if (request.parameters && request.parameters.key !== request.command) throw new AutoSendError('Command parameters do not match.');
-          if (request.source === 'files' && request.command !== 'popupImage') throw new AutoSendError('Files supports Popup Image.');
+          if (request.source === 'files' && request.command !== 'popupImage') throw new AutoSendError('Local Upload supports Popup Image.');
           if (state.tasks.some(task => task.receiver === receiver && task.command === request.command && task.source === request.source)) return this.snapshot();
           const page = await this.transport.probe(tabId);
           if (!page || page.receiver !== receiver || !page.commands.includes(request.command)) throw new AutoSendError('Open the command on the recipient’s page.');
           const task: AutoTask = { id: crypto.randomUUID(), receiver, command: request.command, tabId,
-            source: request.source, parameters: request.parameters, categoryId: request.categoryId, categoryName: request.source === 'files' ? 'Files' : request.categoryId === 'default' ? 'Default' : '',
+            source: request.source, parameters: request.parameters, categoryId: request.categoryId, categoryName: request.source === 'files' ? 'Local Upload' : request.categoryId === 'default' ? 'Default' : '',
             intervalSeconds: request.intervalSeconds, status: 'queued', dueAt: this.now(), orderIds: [], nextItemId: request.itemId, selectionRevision: 0 };
           const items = await this.items(task, page);
           if (task.command !== 'sendOrDelete' && !items.length) throw new AutoSendError('Choose a non-empty category.');

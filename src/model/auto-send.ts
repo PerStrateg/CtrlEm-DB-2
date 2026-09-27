@@ -15,7 +15,7 @@ export const pauseReasons = {
   interrupted: 'Page reloaded or closed. Open the page, then Resume.',
   busy: 'Wait a moment, then Resume.',
   storage: '',
-  file: 'Could not prepare or upload the image. Check Files, then Resume.',
+  file: 'Could not prepare or upload the image. Check Local Upload, then Resume.',
 } as const;
 export type PauseReason = keyof typeof pauseReasons;
 export interface AutoExecution {
