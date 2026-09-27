@@ -6,7 +6,7 @@ import { droppedFiles, pickedFiles, type ImportFile } from '../files/import-file
 import localUploadIllustration from '../../assets/illustrations/ctrlem-grey.svg';
 
 export interface FilesActions {
-  toggle(): void; close(): void; add(files: ImportFile[]): Promise<void>; clear(): void; select(id: string): void;
+  toggle(): void; close(): void; add(files: ImportFile[]): Promise<void>; clear(): void; select(id: string): void; remove(id: string): void;
   previews(value: boolean): void; interval(value: number): void; send(): void; auto(): void;
 }
 export class FilesPanel {
@@ -75,7 +75,7 @@ export class FilesPanel {
     const illustration = doc.createElement('img'); illustration.className = 'ctrlem-db-files-illustration';
     illustration.src = localUploadIllustration; illustration.alt = 'CtrlEm keeps up to 20 uploaded files for sending.'; illustration.draggable = false;
     this.empty.append(dropHint, formats, illustration);
-    this.grid = new FilesGrid(doc, actions.select);
+    this.grid = new FilesGrid(doc, actions.select, actions.remove);
     this.dropzone = doc.createElement('div'); this.dropzone.className = 'ctrlem-db-files-dropzone';
     this.dropzone.append(this.empty, this.grid.element);
     this.element.append(bar, this.confirmation, sendBar, this.dropzone, this.status);
@@ -116,6 +116,7 @@ export class FilesPanel {
   private cancelDrop(): void { this.dropGeneration++; this.readingDrop = false; this.updateImportButtons(); }
   private updateImportButtons(): void { for (const button of this.importButtons) button.disabled = this.importing || this.readingDrop; }
   render(state: FilesSnapshot, open: boolean, task?: AutoTask, importing = false): void {
+    const focusEmpty = open && !state.items.length && this.grid.element.contains(this.element.ownerDocument.activeElement);
     this.button.setAttribute('aria-expanded', String(open)); this.button.setAttribute('aria-label', open ? 'Close Local Upload' : 'Open Local Upload');
     this.count.textContent = `${state.items.length} files`;
     this.empty.hidden = state.items.length > 0;
@@ -128,6 +129,7 @@ export class FilesPanel {
     this.importing = importing; this.updateImportButtons();
     if (!open) this.dropzone.classList.remove('ctrlem-db-files-drag-active');
     this.grid.render(state.items, state.selected, state.previews && !this.element.ownerDocument.hidden, open);
+    if (focusEmpty) this.importButtons[0]!.focus({ preventScroll: true });
   }
   dispose(): void { this.cancelDrop(); this.grid.dispose(); this.element.remove(); this.launcher.remove(); }
 }

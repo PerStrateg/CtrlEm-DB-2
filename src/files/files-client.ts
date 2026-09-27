@@ -11,7 +11,7 @@ export async function filesRequestValue<T>(request: z.infer<typeof filesRequest>
     const reply = await chrome.runtime.sendMessage(request);
     if (!reply?.ok) throw new Error(reply?.error ?? 'Local Upload unavailable. Reload the page.');
     const galleryError = request.type === 'files:gallery' && reply.value?.error;
-    if (galleryError || (request.type !== 'files:progress' && performance.now() - started > 1000) || request.type === 'files:clear') {
+    if (galleryError || (request.type !== 'files:progress' && performance.now() - started > 1000) || request.type === 'files:clear' || request.type === 'files:remove') {
       recordDiagnostic('files.operation', { request: request.type, durationMs: Math.round(performance.now() - started),
         outcome: galleryError ? 'failed' : 'success', code: galleryError ? classifyDiagnosticError(new Error(galleryError)) : undefined });
     }

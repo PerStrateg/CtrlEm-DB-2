@@ -57,4 +57,17 @@ export class FilesRepository {
       tx.objectStore('blobs').clear(); tx.objectStore('state').put(initialFiles(), 'collection');
     });
   }
+  remove(id: string): Promise<FilesSnapshot> {
+    return this.transaction('readwrite', async tx => {
+      const store = tx.objectStore('state');
+      const state: FilesSnapshot = await result(store.get('collection')) ?? initialFiles();
+      const index = state.items.findIndex(item => item.id === id);
+      if (index < 0) return state;
+      state.items.splice(index, 1);
+      state.items.forEach((item, order) => { item.order = order; });
+      if (state.selected === id) state.selected = state.items[Math.min(index, state.items.length - 1)]?.id;
+      for (const part of ['original', 'preview', 'prepared']) tx.objectStore('blobs').delete(`${id}:${part}`);
+      store.put(state, 'collection'); return state;
+    });
+  }
 }

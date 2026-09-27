@@ -38,6 +38,7 @@ export class FilesController {
       toggle: () => results.select(this.open ? 'site' : 'files'),
       close: () => { results.select('site'); this.ui.button.focus({ preventScroll: true }); },
       add: files => this.import(files), clear: () => { void this.clear(); },
+      remove: id => { void this.remove(id); },
       select: id => { void this.select(id); }, previews: value => { void this.preference({ previews: value }); },
       interval: value => { void this.preference({ interval: value }); },
       send: () => { void this.send(); }, auto: () => { void this.toggleAuto(); },
@@ -166,6 +167,14 @@ export class FilesController {
     this.importGeneration++;
     try { this.state = await filesRequestValue({ type: 'files:clear' }); this.ui.message(''); this.render(); }
     catch (error) { this.error(error); }
+  }
+  private async remove(id: string): Promise<void> {
+    try {
+      this.state = await filesRequestValue({ type: 'files:remove', id });
+      if (this.pendingSelection === id) this.pendingSelection = undefined;
+      this.accept(await this.auto.request({ type: 'auto:snapshot' }));
+      this.ui.message(''); this.render();
+    } catch (error) { this.error(error); }
   }
   private async send(): Promise<void> {
     try {

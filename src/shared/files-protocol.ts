@@ -7,6 +7,7 @@ export const filesRequest = z.discriminatedUnion('type', [
   z.object({ type: z.literal('files:gallery') }).strict(),
   z.object({ type: z.literal('files:progress') }).strict(),
   z.object({ type: z.literal('files:clear') }).strict(),
+  z.object({ type: z.literal('files:remove'), id: z.string() }).strict(),
   z.object({ type: z.literal('files:preferences'), previews: z.boolean().optional(), interval: z.number().int().min(3).max(3600).optional(), selected: z.string().optional() }).strict(),
 ]);
 export const filesTransfer = z.discriminatedUnion('type', [

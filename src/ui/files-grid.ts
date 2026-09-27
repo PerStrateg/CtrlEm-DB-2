@@ -3,7 +3,7 @@ import type { FileProgress, LocalImage } from '../model/files';
 import { FilesClient } from '../files/files-client';
 
 interface Card {
-  element: HTMLButtonElement; abort?: AbortController; url?: string; animation?: AbortController; animationUrl?: string; image?: HTMLImageElement;
+  wrapper: HTMLElement; element: HTMLButtonElement; abort?: AbortController; url?: string; animation?: AbortController; animationUrl?: string; image?: HTMLImageElement;
   progress?: HTMLElement; progressLabel?: HTMLElement;
 }
 const progressPhases: Record<NonNullable<FileProgress['phase']>, string> = {
@@ -23,9 +23,10 @@ export class FilesGrid {
   private readonly resize: ResizeObserver;
   private readonly client = new FilesClient();
   private columns = 1;
-  constructor(private readonly doc: Document, private readonly select: (id: string) => void) {
+  constructor(private readonly doc: Document, private readonly select: (id: string) => void, private readonly remove: (id: string) => void) {
     this.element = doc.createElement('div'); this.element.className = 'ctrlem-db-files-grid';
     this.element.setAttribute('role', 'group'); this.element.setAttribute('aria-label', 'Local images');
+    this.element.tabIndex = -1;
     this.canvas = doc.createElement('div'); this.canvas.className = 'ctrlem-db-files-canvas'; this.element.append(this.canvas);
     this.element.addEventListener('scroll', () => this.draw());
     this.resize = new doc.defaultView!.ResizeObserver(() => this.draw()); this.resize.observe(this.element);
@@ -44,6 +45,7 @@ export class FilesGrid {
   render(items: LocalImage[], selected: string | undefined, previews: boolean, active: boolean): void {
     const selectionChanged = selected !== this.selected;
     const changed = items.length !== this.items.length || items.some((item, i) => item.id !== this.items[i]?.id);
+    const focused = changed ? [...this.cards].find(([, card]) => card.wrapper.contains(this.doc.activeElement))?.[0] : undefined;
     if (changed || previews !== this.previews || !active) this.releaseAll();
     this.items = items; this.selected = selected; this.previews = previews; this.active = active; this.draw();
     if (active && selectionChanged && selected) {
@@ -53,6 +55,15 @@ export class FilesGrid {
         if (top < this.element.scrollTop) this.element.scrollTop = top;
         else if (top + filesPolicy.cardSize > this.element.scrollTop + this.element.clientHeight) this.element.scrollTop = top + filesPolicy.cardSize - this.element.clientHeight;
         this.draw();
+      }
+    }
+    if (active && focused !== undefined) {
+      const next = Math.min(focused, items.length - 1);
+      if (next < 0) this.element.focus({ preventScroll: true });
+      else {
+        const top = Math.floor(next / this.columns) * (filesPolicy.cardSize + filesPolicy.gap);
+        if (top < this.element.scrollTop || top + filesPolicy.cardSize > this.element.scrollTop + this.element.clientHeight) this.element.scrollTop = top;
+        this.draw(); this.cards.get(next)?.element.focus({ preventScroll: true });
       }
     }
   }
@@ -89,7 +100,7 @@ export class FilesGrid {
   private release(card: Card): void {
     card.abort?.abort(); card.animation?.abort();
     if (card.url) URL.revokeObjectURL(card.url); if (card.animationUrl) URL.revokeObjectURL(card.animationUrl);
-    card.image?.removeAttribute('src'); card.element.remove();
+    card.image?.removeAttribute('src'); card.wrapper.remove();
   }
   private releaseAll(): void { for (const card of this.cards.values()) this.release(card); this.cards.clear(); }
   private draw(): void {
@@ -104,10 +115,15 @@ export class FilesGrid {
       const item = this.items[i]!;
       let card = this.cards.get(i);
       if (!card) {
+        const wrapper = this.doc.createElement('div'); wrapper.className = 'ctrlem-db-files-item';
         const element = this.doc.createElement('button'); element.type = 'button'; element.className = 'ctrlem-db-files-card';
         element.dataset.index = String(i); element.setAttribute('aria-label', `Image ${i + 1}`);
-        this.canvas.append(element);
-        card = { element }; this.cards.set(i, card);
+        const remove = this.doc.createElement('button'); remove.type = 'button'; remove.className = 'ctrlem-db-files-remove';
+        remove.textContent = '×'; remove.setAttribute('aria-label', `Remove image ${i + 1} from Local Upload`);
+        remove.title = 'Remove from Local Upload';
+        remove.addEventListener('click', () => this.remove(item.id));
+        wrapper.append(element, remove); this.canvas.append(wrapper);
+        card = { wrapper, element }; this.cards.set(i, card);
         element.addEventListener('click', () => this.select(item.id));
         if (this.previews) {
           const abort = card.abort = new AbortController(); const owned = card;
@@ -137,7 +153,7 @@ export class FilesGrid {
           }
         }
       }
-      card.element.style.transform = `translate(${i % this.columns * stride}px, ${Math.floor(i / this.columns) * stride}px)`;
+      card.wrapper.style.transform = `translate(${i % this.columns * stride}px, ${Math.floor(i / this.columns) * stride}px)`;
       card.element.setAttribute('aria-pressed', String(item.id === this.selected));
       card.element.dataset.uploaded = String(Boolean(item.uploadId));
       card.element.setAttribute('aria-description', item.uploadId ? 'Uploaded to CtrlEm' : 'Not uploaded to CtrlEm');

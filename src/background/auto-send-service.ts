@@ -285,6 +285,39 @@ export class AutoSendService {
       await this.commit(state);
     });
   }
+  removeFile(id: string, remove: () => Promise<void>): Promise<void> {
+    return this.queue.run(async () => {
+      await this.load();
+      if (this.fileUpload?.itemId === id) this.fileUpload.abort.abort();
+      await remove();
+      const items = await this.files!.items(), state = structuredClone(this.state);
+      state.sends = state.sends.filter(send => {
+        if (send.source !== 'files' || send.fileId !== id) return true;
+        if (!send.execution) return false;
+        send.execution.sourceInvalidated = true; send.status = 'stopping'; return true;
+      });
+      state.tasks = state.tasks.filter(task => {
+        if (task.source !== 'files') return true;
+        if (!items.length) {
+          if (!task.execution) return false;
+          task.execution.sourceInvalidated = true; task.status = 'stopping'; return true;
+        }
+        const affected = task.nextItemId === id || task.highlightedItemId === id || task.preparation?.itemId === id ||
+          task.preparedItemId === id || task.retryExecution?.itemId === id || task.execution?.itemId === id;
+        if (affected) {
+          if (task.execution?.itemId === id) task.execution.sourceInvalidated = true;
+          task.nextItemId = task.highlightedItemId = nextAutoItem(task, items)?.id;
+          task.selectionRevision++;
+          delete task.preparation; delete task.preparedItemId; delete task.retryExecution; delete task.fileError;
+          if (task.reason === 'file' || task.reason === 'empty' || task.reason === 'failed') {
+            task.status = 'queued'; task.retryCount = 0; delete task.reason; delete task.failureCode;
+          }
+        }
+        task.orderIds = items.map(item => item.id); return true;
+      });
+      await this.commit(state);
+    });
+  }
   private async prepareFile(state: AutoState, entry: QueueEntry, itemId: string): Promise<void> {
     const token = crypto.randomUUID(), abort = new AbortController();
     entry.preparation = { token, itemId }; delete entry.fileError;

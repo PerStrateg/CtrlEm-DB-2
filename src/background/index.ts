@@ -23,7 +23,7 @@ import { filesPort } from '../shared/files-protocol';
 const libraryQueue = new WriteQueue();
 const files = createFilesService();
 const scheduler = registerAutoSend(libraryQueue, files);
-registerFiles(files, () => scheduler.clearFiles());
+registerFiles(files, () => scheduler.clearFiles(), id => scheduler.removeFile(id, () => files.remove(id)));
 registerImageCache();
 registerRedgifs();
 registerRedgifsAdblock();

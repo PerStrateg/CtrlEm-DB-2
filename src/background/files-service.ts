@@ -41,6 +41,13 @@ export class FilesService implements FilesSource {
     return Boolean(job && !job.abort.signal.aborted && job.tabId === tabId && job.id === id && job.part === part && job.generation === generation);
   }
   cancelAll(): void { for (const job of this.jobs.values()) job.abort.abort(); }
+  async remove(id: string): Promise<void> {
+    await this.writes.run(() => {
+      for (const job of this.jobs.values()) if (job.id === id) job.abort.abort();
+      return this.repository.remove(id);
+    });
+    this.changed();
+  }
   gallery(): Promise<FilesGallery> {
     return this.uploadsQueue.run(async () => {
       try {
@@ -62,13 +69,16 @@ export class FilesService implements FilesSource {
     await this.blob(tabId, id, 'prepared', signal);
   }
   private async process(tabId: number, id: string, part: 'preview' | 'prepared', signal: AbortSignal): Promise<void> {
-    const state = await this.repository.read();
-    const item = state.items.find(item => item.id === id);
-    if (!item) throw new Error('File no longer available.');
     const token = crypto.randomUUID(), abort = new AbortController();
+    // Register while holding the same queue as deletion: it cannot miss a new job.
+    const { state, item } = await this.writes.run(async () => {
+      const state = await this.repository.read(), item = state.items.find(item => item.id === id);
+      if (!item) throw new Error('File no longer available.');
+      this.jobs.set(token, { tabId, id, part, generation: state.generation, abort });
+      return { state, item };
+    });
     const cancel = () => abort.abort(); signal.addEventListener('abort', cancel, { once: true });
     const message: FileProcess = { type: 'files:process', token, id, part, generation: state.generation };
-    this.jobs.set(token, { tabId, id, part, generation: state.generation, abort });
     if (part === 'prepared') this.setProgress(id, token, { id, stage: 'preparing' });
     const startedAt = performance.now();
     if (part === 'prepared') reportTabDiagnostic(tabId, 'files.prepare', { outcome: 'start', stage: 'encode', inputBytes: item.size, mime: diagnosticMime(item.mime) });
@@ -82,6 +92,7 @@ export class FilesService implements FilesSource {
       timer = setTimeout(() => { timedOut = true; cancel(); }, filesPolicy.processTimeoutMs);
     });
     try {
+      if (abort.signal.aborted) throw new Error('Image preparation cancelled.');
       if (signal.aborted) cancel();
       const reply = await Promise.race([chrome.tabs.sendMessage(tabId, message), cancelled]);
       if (!reply?.ok) throw new Error(reply?.error ?? 'Image processor unavailable. Reload the page.');
@@ -134,7 +145,11 @@ export class FilesService implements FilesSource {
     });
   }
   async preferences(change: Partial<Pick<FilesSnapshot, 'previews' | 'interval' | 'selected'>>): Promise<FilesSnapshot> {
-    const state = await this.writes.run(() => this.repository.update(state => Object.assign(state, change)));
+    const state = await this.writes.run(() => this.repository.update(state => {
+      const { selected, ...preferences } = change;
+      Object.assign(state, preferences);
+      if (selected !== undefined && state.items.some(item => item.id === selected)) state.selected = selected;
+    }));
     this.changed(); return state;
   }
 }

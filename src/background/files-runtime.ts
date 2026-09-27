@@ -19,7 +19,7 @@ export function createFilesService(): FilesService {
   return new FilesService(() => publish({ type: 'files:changed' }), snapshot => publish({ type: 'files:progress', ...snapshot }));
 }
 
-export function registerFiles(service: FilesService, clearQueue: () => Promise<void>): void {
+export function registerFiles(service: FilesService, clearQueue: () => Promise<void>, removeFile: (id: string) => Promise<void>): void {
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (!message?.type?.startsWith('files:')) return false;
     if (message.type === 'files:heartbeat' && fileSender(sender)?.processor) { respond({ ok: true }); return false; }
@@ -37,6 +37,7 @@ export function registerFiles(service: FilesService, clearQueue: () => Promise<v
       const request = parsed.data;
       if (request.type === 'files:gallery') return service.gallery();
       if (request.type === 'files:progress') return service.progressSnapshot();
+      if (request.type === 'files:remove') { await removeFile(request.id); return service.repository.read(); }
       if (request.type === 'files:clear') {
         await clearQueue(); service.cancelAll(); await service.writes.run(() => service.repository.clear());
         return service.preferences({});
@@ -82,10 +83,12 @@ export function registerFiles(service: FilesService, clearQueue: () => Promise<v
         } else if (message.type === 'finish') {
           if (!header || size !== header.size) throw new Error('Incomplete file transfer.');
           const h = header, blob = new Blob(chunks, { type: h.mime }); chunks = [];
-          if (source.processor && !service.accepts(h.token!, source.tabId, h.id, h.part, h.generation)) throw new Error('Image preparation cancelled.');
           const id = h.part === 'original' ? Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer())), b => b.toString(16).padStart(2, '0')).join('') : h.id;
-          await service.writes.run(() => service.repository.put(h.generation, id, h.part as FilePart, blob,
-            { name: h.name!, path: h.path ?? h.name!, mime: h.mime, size: blob.size }));
+          await service.writes.run(() => {
+            if (source.processor && !service.accepts(h.token!, source.tabId, h.id, h.part, h.generation)) throw new Error('Image preparation cancelled.');
+            return service.repository.put(h.generation, id, h.part as FilePart, blob,
+              { name: h.name!, path: h.path ?? h.name!, mime: h.mime, size: blob.size });
+          });
           if (h.part === 'original') await service.preferences({});
         }
         send({ ok: true });
