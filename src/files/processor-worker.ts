@@ -36,8 +36,11 @@ export async function prepareImage(blob: Blob): Promise<Blob> {
     const mime = format === MagickFormat.Gif ? 'image/gif' : format === MagickFormat.Jpeg ? 'image/jpeg' : format === MagickFormat.Png ? 'image/png' : 'image/webp';
     if (animated) images.coalesce();
     for (const image of images) { image.autoOrient(); image.strip(); }
-    const attempts = [{ scale: 1, quality: 100, colors: 256 },
-      ...filesPolicy.qualitySteps.map((quality, i) => ({ scale: 1, quality, colors: filesPolicy.paletteSteps[i]! })),
+    // GIF quality does not reduce its size. Only try a new palette after the lossless pass.
+    const reductionSteps = gif ? filesPolicy.paletteSteps.filter(colors => colors < 256)
+      .map(colors => ({ scale: 1, quality: 100, colors }))
+      : filesPolicy.qualitySteps.map((quality, i) => ({ scale: 1, quality, colors: filesPolicy.paletteSteps[i]! }));
+    const attempts = [{ scale: 1, quality: 100, colors: 256 }, ...reductionSteps,
       ...Array.from({ length: filesPolicy.maxResizeSteps }, (_, i) => ({ scale: filesPolicy.resizeFactor ** (i + 1), quality: 65, colors: 64 }))];
     for (const attempt of attempts) {
       const result = images.clone(copy => {
