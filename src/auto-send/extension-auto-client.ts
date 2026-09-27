@@ -50,7 +50,9 @@ export function bindAutoExecutor(page: AutoSendPage): () => void {
     }).then(outcome => {
       recordDiagnostic('auto.execute', { command, outcome: outcome.status === 'success' ? 'success' : 'paused',
         durationMs: Math.round(performance.now() - started),
-        reason: outcome.status === 'paused' ? outcome.reason : undefined });
+        reason: outcome.status === 'paused' ? outcome.reason : undefined,
+        failureCode: outcome.status === 'paused' ? outcome.failureCode : undefined,
+        retryAfterMs: outcome.status === 'paused' ? outcome.retryAfterMs : undefined });
       respond(outcome);
     }, error => {
       recordDiagnostic('auto.execute', { command, outcome: 'failed', code: classifyDiagnosticError(error), durationMs: Math.round(performance.now() - started) });

@@ -3,11 +3,11 @@ import { commandKeys } from '../model/commands';
 
 export const diagnosticLimits = { maxBytes: 5 * 1024 * 1024, maxEntries: 8192, headerBytes: 4096 };
 const events = ['session.start', 'session.end', 'upload', 'library', 'auto.request', 'auto.execute',
-  'files.import', 'files.prepare', 'native.send', 'site.error', 'log.export'] as const;
+  'files.import', 'files.prepare', 'files.operation', 'native.send', 'site.error', 'log.export'] as const;
 const commands = [...commandKeys, 'sendOrDelete', 'session', 'other'] as const;
 const mimes = ['image/gif', 'image/png', 'image/jpeg', 'image/webp', 'image/avif', 'image/bmp', 'video/mp4', 'audio/mpeg', 'other'] as const;
 const codes = ['unknown', 'network', 'http', 'invalid-response', 'interrupted', 'file-read', 'unavailable',
-  'timeout', 'permission', 'quota', 'validation', 'decode', 'image-body-decode', 'image-body-read', 'stream-error', 'site-rejected'] as const;
+  'timeout', 'permission', 'quota', 'validation', 'decode', 'rate-limit', 'image-body-decode', 'image-body-read', 'stream-error', 'site-rejected'] as const;
 const number = z.number().finite().nonnegative().optional();
 const browserErrorPattern = /^(?:NS_ERROR_[A-Z0-9_]+|net::ERR_[A-Z0-9_]+)$/;
 // Only enums, browser symbolic codes, numbers and booleans cross this boundary. No arbitrary error text,
@@ -21,9 +21,11 @@ const detailsSchema = z.object({
   code: z.enum(codes).optional(),
   stage: z.enum(['access', 'settings', 'page', 'token', 'upload', 'response', 'transfer', 'decode', 'resize', 'encode']).optional(),
   reason: z.enum(['unavailable', 'empty', 'failed', 'invalid', 'unknown', 'interrupted', 'busy', 'storage', 'file']).optional(),
+  failureCode: z.enum(['rateLimit', 'required', 'url', 'textLength', 'count', 'session', 'rejected']).optional(),
   request: z.enum(['library:load', 'library:change', 'library:capture', 'library:import', 'library:add-upload', 'library:session',
     'picker:load', 'picker:select', 'auto:snapshot', 'auto:start', 'auto:stop', 'auto:seek', 'auto:stop-all', 'auto:resume',
-    'auto:open', 'auto:manual', 'auto:enqueue', 'auto:ready', 'auto:claim', 'auto:dismiss', 'auto:detach']).optional(),
+    'auto:open', 'auto:manual', 'auto:enqueue', 'auto:ready', 'auto:claim', 'auto:dismiss', 'auto:detach',
+    'files:list', 'files:gallery', 'files:progress', 'files:clear', 'files:preferences']).optional(),
   observation: z.enum(['observed', 'not-observed', 'unavailable', 'ambiguous']).optional(),
   hostPermission: z.enum(['granted', 'missing', 'unknown']).optional(),
   observerPermission: z.enum(['granted', 'missing', 'unknown']).optional(),
@@ -97,10 +99,12 @@ export function diagnosticBrowserError(value: string | undefined): string | unde
 }
 export function classifyDiagnosticError(error: unknown): typeof codes[number] {
   const message = error instanceof Error ? `${error.name} ${error.message}` : '';
-  if (/abort|interrupt|disconnect/i.test(message)) return 'interrupted';
+  if (/abort|interrupt|disconnect|cancel/i.test(message)) return 'interrupted';
   if (/timeout|timed out/i.test(message)) return 'timeout';
   if (/quota/i.test(message)) return 'quota';
   if (/permission|access denied/i.test(message)) return 'permission';
+  if (/rate limit/i.test(message)) return 'rate-limit';
+  if (/HTTP \d{3}|failed \(\d{3}\)/i.test(message)) return 'http';
   if (/fetch|network|connection/i.test(message)) return 'network';
   if (/decode|corrupt/i.test(message)) return 'decode';
   if (/invalid|validation/i.test(message)) return 'validation';

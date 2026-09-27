@@ -3,11 +3,23 @@ import { filesPolicy } from '../model/files';
 import type { FilePart, FilesSnapshot, FilesGallery } from '../model/files';
 import type { z } from '../shared/validation';
 import type { filesRequest } from '../shared/files-protocol';
+import { classifyDiagnosticError, recordDiagnostic } from '../diagnostics/session-log';
 
 export async function filesRequestValue<T>(request: z.infer<typeof filesRequest>): Promise<T> {
-  const reply = await chrome.runtime.sendMessage(request);
-  if (!reply?.ok) throw new Error(reply?.error ?? 'Local Upload unavailable. Reload the page.');
-  return reply.value;
+  const started = performance.now();
+  try {
+    const reply = await chrome.runtime.sendMessage(request);
+    if (!reply?.ok) throw new Error(reply?.error ?? 'Local Upload unavailable. Reload the page.');
+    const galleryError = request.type === 'files:gallery' && reply.value?.error;
+    if (galleryError || (request.type !== 'files:progress' && performance.now() - started > 1000) || request.type === 'files:clear') {
+      recordDiagnostic('files.operation', { request: request.type, durationMs: Math.round(performance.now() - started),
+        outcome: galleryError ? 'failed' : 'success', code: galleryError ? classifyDiagnosticError(new Error(galleryError)) : undefined });
+    }
+    return reply.value;
+  } catch (error) {
+    recordDiagnostic('files.operation', { request: request.type, outcome: 'failed', durationMs: Math.round(performance.now() - started), code: classifyDiagnosticError(error) });
+    throw error;
+  }
 }
 export const readFiles = () => filesRequestValue<FilesSnapshot>({ type: 'files:list' });
 export const readGallery = () => filesRequestValue<FilesGallery>({ type: 'files:gallery' });
