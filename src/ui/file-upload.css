@@ -23,6 +23,7 @@
 .ctrlem-db-upload .upload-dropzone.drag-active { background: color-mix(in srgb, var(--upload-accent) 10%, var(--bg-tertiary)); }
 .ctrlem-db-upload .upload-dropzone.drag-active { box-shadow: 0 0 0 3px color-mix(in srgb, var(--upload-accent) 15%, transparent); }
 
+.ctrlem-db-upload .upload-copy { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; column-gap: 8px; }
 .ctrlem-db-upload .upload-hint { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
 .ctrlem-db-upload li { padding: 8px 0; }
 .ctrlem-db-upload li button { margin-top: 8px; margin-right: 8px; }
