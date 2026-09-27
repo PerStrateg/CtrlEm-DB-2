@@ -1,8 +1,15 @@
 import { filesPolicy } from '../model/files';
-import type { LocalImage } from '../model/files';
+import type { FileProgress, LocalImage } from '../model/files';
 import { FilesClient } from '../files/files-client';
 
-interface Card { element: HTMLButtonElement; abort?: AbortController; url?: string; animation?: AbortController; animationUrl?: string; image?: HTMLImageElement }
+interface Card {
+  element: HTMLButtonElement; abort?: AbortController; url?: string; animation?: AbortController; animationUrl?: string; image?: HTMLImageElement;
+  progress?: HTMLElement; progressLabel?: HTMLElement;
+}
+const progressPhases: Record<NonNullable<FileProgress['phase']>, string> = {
+  decoding: 'Reading image', frames: 'Preparing frames', resizing: 'Resizing', palette: 'Reducing colors',
+  optimizing: 'Optimizing', encoding: 'Encoding', storing: 'Finishing',
+};
 /** Only visible rows own DOM nodes and decoded images, including when previews are disabled. */
 export class FilesGrid {
   readonly element: HTMLElement;
@@ -12,6 +19,7 @@ export class FilesGrid {
   private previews = true;
   private active = false;
   private readonly cards = new Map<number, Card>();
+  private progress = new Map<string, FileProgress>();
   private readonly resize: ResizeObserver;
   private readonly client = new FilesClient();
   private columns = 1;
@@ -47,6 +55,36 @@ export class FilesGrid {
         this.draw();
       }
     }
+  }
+  setProgress(items: FileProgress[]): void {
+    this.progress = new Map(items.map(item => [item.id, item]));
+    for (const [index, card] of this.cards) this.renderProgress(card, this.items[index]!, index);
+  }
+  private renderProgress(card: Card, item: LocalImage, index: number): void {
+    const progress = this.progress.get(item.id);
+    if (!progress) {
+      card.progress?.remove(); card.progress = undefined; card.progressLabel = undefined;
+      card.element.removeAttribute('aria-busy'); card.element.setAttribute('aria-label', `Image ${index + 1}`);
+      return;
+    }
+    if (!card.progress) {
+      card.progress = this.doc.createElement('span'); card.progress.className = 'ctrlem-db-files-progress';
+      card.progress.setAttribute('aria-hidden', 'true');
+      const fill = this.doc.createElement('span'); fill.className = 'ctrlem-db-files-progress-fill';
+      card.progressLabel = this.doc.createElement('span'); card.progressLabel.className = 'ctrlem-db-files-progress-label';
+      card.progress.append(fill, card.progressLabel); card.element.append(card.progress);
+    }
+    const stage = progress.stage === 'uploading' ? 'Uploading' : 'Preparing';
+    const phase = progress.phase ? progressPhases[progress.phase] : stage;
+    const attempt = progress.attempt && progress.attempt > 1 ? ` · pass ${progress.attempt}` : '';
+    const frame = progress.frame && progress.frames ? ` · frame ${progress.frame}/${progress.frames}` : '';
+    const caption = `${phase}${attempt}${frame}`;
+    const label = progress.percent === undefined ? `${caption}…` : `${caption}\n${Math.floor(progress.percent)}%`;
+    card.progress.dataset.indeterminate = String(progress.percent === undefined);
+    card.progress.style.setProperty('--files-progress', `${progress.percent ?? 100}%`);
+    if (card.progressLabel!.textContent !== label) card.progressLabel!.textContent = label;
+    card.element.setAttribute('aria-busy', 'true');
+    card.element.setAttribute('aria-label', `Image ${index + 1} · ${progress.phase ? `${stage} · ` : ''}${label.replace('\n', ' · ')}`);
   }
   private release(card: Card): void {
     card.abort?.abort(); card.animation?.abort();
@@ -104,6 +142,7 @@ export class FilesGrid {
       card.element.dataset.uploaded = String(Boolean(item.uploadId));
       card.element.setAttribute('aria-description', item.uploadId ? 'Uploaded to CtrlEm' : 'Not uploaded to CtrlEm');
       card.element.classList.toggle('ctrlem-db-files-no-preview', !this.previews);
+      this.renderProgress(card, item, i);
     }
   }
   dispose(): void { this.releaseAll(); this.resize.disconnect(); }

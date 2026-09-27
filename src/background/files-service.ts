@@ -1,5 +1,5 @@
 import { filesPolicy } from '../model/files';
-import type { FilePart, FilesGallery, FilesSnapshot } from '../model/files';
+import type { FilePart, FileProgress, FilesGallery, FilesSnapshot, FilesProgressSnapshot } from '../model/files';
 import type { FileProcess } from '../shared/files-protocol';
 import { FilesRepository } from '../storage/files-store';
 import { NativeUploads } from '../site/native-uploads';
@@ -19,7 +19,22 @@ export class FilesService implements FilesSource {
   private readonly uploadsQueue = new WriteQueue();
   private readonly native = new NativeUploads();
   private readonly jobs = new Map<string, { tabId: number; id: string; part: FilePart; generation: string; abort: AbortController }>();
-  constructor(private readonly changed: () => void) {}
+  private readonly progress = new Map<string, { token: string; value: FileProgress }>();
+  private progressRevision = Date.now();
+  constructor(private readonly changed: () => void, private readonly progressChanged: (snapshot: FilesProgressSnapshot) => void) {}
+  progressSnapshot(): FilesProgressSnapshot { return { revision: this.progressRevision, items: [...this.progress.values()].map(({ value }) => value) }; }
+  processProgress(tabId: number, token: string, progress: Omit<FileProgress, 'id' | 'stage'>): void {
+    const job = this.jobs.get(token);
+    if (!job || job.part !== 'prepared' || job.tabId !== tabId || job.abort.signal.aborted) return;
+    this.setProgress(job.id, token, { id: job.id, stage: 'preparing', ...progress });
+  }
+  private setProgress(id: string, token: string, value?: FileProgress): void {
+    if (value) this.progress.set(id, { token, value });
+    else if (this.progress.get(id)?.token === token) this.progress.delete(id);
+    else return;
+    this.progressRevision = Math.max(Date.now(), this.progressRevision + 1);
+    this.progressChanged(this.progressSnapshot());
+  }
   items() { return this.repository.read().then(state => state.items.map(({ id }) => ({ id }))); }
   accepts(token: string, tabId: number, id: string, part: FilePart, generation: string): boolean {
     const job = this.jobs.get(token);
@@ -54,15 +69,17 @@ export class FilesService implements FilesSource {
     const cancel = () => abort.abort(); signal.addEventListener('abort', cancel, { once: true });
     const message: FileProcess = { type: 'files:process', token, id, part, generation: state.generation };
     this.jobs.set(token, { tabId, id, part, generation: state.generation, abort });
+    if (part === 'prepared') this.setProgress(id, token, { id, stage: 'preparing' });
     const startedAt = performance.now();
     if (part === 'prepared') reportTabDiagnostic(tabId, 'files.prepare', { outcome: 'start', stage: 'encode', inputBytes: item.size, mime: diagnosticMime(item.mime) });
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = false;
     const cancelled = new Promise<never>((_, reject) => {
       abort.signal.addEventListener('abort', () => {
         void chrome.tabs.sendMessage(tabId, { type: 'files:cancel-process', token }).catch(() => {});
-        reject(new Error('Image preparation cancelled.'));
+        reject(new Error(timedOut ? 'Image preparation timed out. Try a smaller image.' : 'Image preparation cancelled.'));
       }, { once: true });
-      timer = setTimeout(cancel, filesPolicy.processTimeoutMs);
+      timer = setTimeout(() => { timedOut = true; cancel(); }, filesPolicy.processTimeoutMs);
     });
     try {
       if (signal.aborted) cancel();
@@ -70,9 +87,12 @@ export class FilesService implements FilesSource {
       if (!reply?.ok) throw new Error(reply?.error ?? 'Image processor unavailable. Reload the page.');
       if (part === 'prepared') reportTabDiagnostic(tabId, 'files.prepare', { outcome: 'success', stage: 'encode', durationMs: performance.now() - startedAt, outputBytes: reply.bytes });
     } catch (error) {
-      if (part === 'prepared') reportTabDiagnostic(tabId, 'files.prepare', { outcome: abort.signal.aborted ? 'cancelled' : 'failed', stage: 'encode', durationMs: performance.now() - startedAt, code: classifyDiagnosticError(error) });
+      if (part === 'prepared') reportTabDiagnostic(tabId, 'files.prepare', { outcome: timedOut ? 'failed' : abort.signal.aborted ? 'cancelled' : 'failed', stage: 'encode', durationMs: performance.now() - startedAt, code: timedOut ? 'timeout' : classifyDiagnosticError(error) });
       throw error;
-    } finally { clearTimeout(timer); signal.removeEventListener('abort', cancel); this.jobs.delete(token); }
+    } finally {
+      clearTimeout(timer); signal.removeEventListener('abort', cancel); this.jobs.delete(token);
+      if (part === 'prepared') this.setProgress(id, token);
+    }
   }
   resolve(id: string, signal: AbortSignal, tabId: number): Promise<string> {
     const startedAt = performance.now();
@@ -94,7 +114,11 @@ export class FilesService implements FilesSource {
       }
       signal.throwIfAborted();
       const extension = blob.type === 'image/jpeg' ? 'jpg' : blob.type.split('/')[1];
-      const uploaded = await this.native.uploadImage(blob, `${item.name.replace(/\.[^.]+$/, '')}.${extension}`, signal);
+      const token = crypto.randomUUID();
+      this.setProgress(id, token, { id, stage: 'uploading' });
+      let uploaded;
+      try { uploaded = await this.native.uploadImage(blob, `${item.name.replace(/\.[^.]+$/, '')}.${extension}`, signal); }
+      finally { this.setProgress(id, token); }
       await this.writes.run(() => this.repository.update(current => {
         if (current.generation !== state.generation) return;
         const file = current.items.find(file => file.id === id); if (file) file.uploadId = uploaded.id;

@@ -1,5 +1,6 @@
 import { ImageMagick, initializeImageMagick, MagickFormat, MagickReadSettings, QuantizeSettings } from '@imagemagick/magick-wasm';
-import { filesPolicy } from '../model/files';
+import { filesPolicy, type ImagePreparationProgress } from '../model/files';
+import { observeEncodingProgress, throttlePreparationProgress } from './processor-progress';
 
 let initialized: Promise<void> | undefined;
 const initialize = () => initialized ??= fetch(new URL('magick.wasm', location.href))
@@ -25,8 +26,9 @@ async function thumbnail(blob: Blob): Promise<Blob> {
   });
 }
 
-export async function prepareImage(blob: Blob): Promise<Blob> {
+export async function prepareImage(blob: Blob, progress?: (value: ImagePreparationProgress) => void): Promise<Blob> {
   if (['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(blob.type) && blob.size <= filesPolicy.maxUploadBytes) return blob;
+  progress?.({ phase: 'decoding' });
   await initialize();
   return ImageMagick.readCollection(new Uint8Array(await blob.arrayBuffer()), images => {
     const gif = images[0]!.format === MagickFormat.Gif;
@@ -34,7 +36,7 @@ export async function prepareImage(blob: Blob): Promise<Blob> {
     const format = gif ? MagickFormat.Gif : animated ? MagickFormat.WebP :
       images[0]!.format === MagickFormat.Jpeg ? MagickFormat.Jpeg : images[0]!.format === MagickFormat.Png ? MagickFormat.Png : MagickFormat.WebP;
     const mime = format === MagickFormat.Gif ? 'image/gif' : format === MagickFormat.Jpeg ? 'image/jpeg' : format === MagickFormat.Png ? 'image/png' : 'image/webp';
-    if (animated) images.coalesce();
+    if (animated) { progress?.({ phase: 'frames' }); images.coalesce(); }
     for (const image of images) { image.autoOrient(); image.strip(); }
     // GIF quality does not reduce its size. Only try a new palette after the lossless pass.
     const reductionSteps = gif ? filesPolicy.paletteSteps.filter(colors => colors < 256)
@@ -42,18 +44,30 @@ export async function prepareImage(blob: Blob): Promise<Blob> {
       : filesPolicy.qualitySteps.map((quality, i) => ({ scale: 1, quality, colors: filesPolicy.paletteSteps[i]! }));
     const attempts = [{ scale: 1, quality: 100, colors: 256 }, ...reductionSteps,
       ...Array.from({ length: filesPolicy.maxResizeSteps }, (_, i) => ({ scale: filesPolicy.resizeFactor ** (i + 1), quality: 65, colors: 64 }))];
-    for (const attempt of attempts) {
+    for (const [index, attempt] of attempts.entries()) {
+      const pass = index + 1;
       const result = images.clone(copy => {
-        for (const image of copy) {
+        if (attempt.scale < 1) progress?.({ phase: 'resizing', attempt: pass });
+        for (const [frame, image] of copy.entries()) {
           image.quality = attempt.quality;
-          if (attempt.scale < 1) image.resize(Math.max(1, Math.round(image.width * attempt.scale)), Math.max(1, Math.round(image.height * attempt.scale)));
+          if (attempt.scale < 1) {
+            image.resize(Math.max(1, Math.round(image.width * attempt.scale)), Math.max(1, Math.round(image.height * attempt.scale)));
+            progress?.({ phase: 'resizing', attempt: pass, percent: Math.floor((frame + 1) * 100 / copy.length), frame: frame + 1, frames: copy.length });
+          }
         }
         if (attempt.scale < 1) copy.resetPage();
         if ((gif || format === MagickFormat.Png) && attempt.colors < 256) {
+          progress?.({ phase: 'palette', attempt: pass });
           const quantize = new QuantizeSettings(); quantize.colors = attempt.colors; copy.quantize(quantize);
         }
-        if (gif && animated) { copy.optimize(); copy.optimizeTransparency(); }
-        return copy.write(format, data => asBlob(data, mime));
+        if (gif && animated) {
+          progress?.({ phase: 'optimizing', attempt: pass }); copy.optimize(); copy.optimizeTransparency();
+        }
+        progress?.({ phase: 'encoding', attempt: pass });
+        if (progress) observeEncodingProgress(copy, pass, progress);
+        const encoded = copy.write(format, data => asBlob(data, mime));
+        progress?.({ phase: 'encoding', attempt: pass, percent: 100 });
+        return encoded;
       });
       if (result.size <= filesPolicy.maxUploadBytes) return result;
     }
@@ -62,6 +76,7 @@ export async function prepareImage(blob: Blob): Promise<Blob> {
 }
 
 self.onmessage = (event: MessageEvent<{ blob: Blob; part: 'preview' | 'prepared' }>) => {
-  void (event.data.part === 'preview' ? thumbnail(event.data.blob) : prepareImage(event.data.blob)).then(
+  const progress = throttlePreparationProgress(value => self.postMessage({ type: 'progress', progress: value }));
+  void (event.data.part === 'preview' ? thumbnail(event.data.blob) : prepareImage(event.data.blob, progress)).then(
     blob => self.postMessage({ blob }), error => self.postMessage({ error: error instanceof Error ? error.message : 'Image processing failed.' }));
 };

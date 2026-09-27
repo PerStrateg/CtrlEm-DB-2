@@ -27,11 +27,18 @@ chrome.runtime.onMessage.addListener((input, sender, respond) => {
       const worker = new Worker(chrome.runtime.getURL('files-worker.js'));
       const finish = () => { worker.terminate(); jobs.delete(job.token); };
       jobs.set(job.token, { worker, cancel: () => { finish(); reject(new Error('Image preparation cancelled.')); } });
-      worker.onmessage = event => { finish(); event.data.error ? reject(new Error(event.data.error)) : resolve(event.data.blob); };
+      worker.onmessage = event => {
+        if (event.data.type === 'progress') {
+          void chrome.runtime.sendMessage({ type: 'files:process-progress', token: job.token, ...event.data.progress });
+          return;
+        }
+        finish(); event.data.error ? reject(new Error(event.data.error)) : resolve(event.data.blob);
+      };
       worker.onerror = () => { finish(); reject(new Error('Image processing failed. Try a smaller image.')); };
       worker.postMessage({ blob, part: job.part });
     });
     if (cancelled.has(job.token)) throw new Error('Image preparation cancelled.');
+    if (job.part === 'prepared') void chrome.runtime.sendMessage({ type: 'files:process-progress', token: job.token, phase: 'storing' });
     await client.put(output, { id: job.id, generation: job.generation, part: job.part, token: job.token });
     return output.size;
   };

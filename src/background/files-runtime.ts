@@ -1,4 +1,4 @@
-import { filesPort, filesRequest, filesTransfer } from '../shared/files-protocol';
+import { filesPort, filesRequest, filesTransfer, filesProcessProgress } from '../shared/files-protocol';
 import { filesPolicy } from '../model/files';
 import type { FilePart } from '../model/files';
 import { authorizedTab } from './library-service';
@@ -12,10 +12,11 @@ function fileSender(sender: chrome.runtime.MessageSender): { tabId: number; proc
 }
 
 export function createFilesService(): FilesService {
-  return new FilesService(() => {
+  const publish = (message: unknown) => {
     void chrome.tabs.query({ url: ['https://ctrlem.com/u/*', 'https://ctrlem.com/groups/*'] }).then(tabs => Promise.all(tabs.map(tab =>
-      tab.id === undefined ? undefined : chrome.tabs.sendMessage(tab.id, { type: 'files:changed' }, { frameId: 0 }).catch(() => {}))));
-  });
+      tab.id === undefined ? undefined : chrome.tabs.sendMessage(tab.id, message, { frameId: 0 }).catch(() => {}))));
+  };
+  return new FilesService(() => publish({ type: 'files:changed' }), snapshot => publish({ type: 'files:progress', ...snapshot }));
 }
 
 export function registerFiles(service: FilesService, clearQueue: () => Promise<void>): void {
@@ -23,10 +24,19 @@ export function registerFiles(service: FilesService, clearQueue: () => Promise<v
     if (!message?.type?.startsWith('files:')) return false;
     if (message.type === 'files:heartbeat' && fileSender(sender)?.processor) { respond({ ok: true }); return false; }
     const source = fileSender(sender), parsed = filesRequest.safeParse(message);
+    if (message.type === 'files:process-progress') {
+      const progress = filesProcessProgress.safeParse(message);
+      if (source?.processor && progress.success) {
+        const { type, token, ...value } = progress.data;
+        service.processProgress(source.tabId, token, value);
+      }
+      return false;
+    }
     if (!source || source.processor || !parsed.success) { respond({ ok: false, error: 'Request not allowed.' }); return false; }
     void (async () => {
       const request = parsed.data;
       if (request.type === 'files:gallery') return service.gallery();
+      if (request.type === 'files:progress') return service.progressSnapshot();
       if (request.type === 'files:clear') {
         await clearQueue(); service.cancelAll(); await service.writes.run(() => service.repository.clear());
         return service.preferences({});

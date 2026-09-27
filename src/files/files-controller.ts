@@ -4,7 +4,7 @@ import { ResultsController } from '../ui/results-controller';
 import { FilesPanel } from '../ui/files-panel';
 import { FilesClient, filesRequestValue, readFiles, readGallery } from './files-client';
 import { initialFiles } from '../model/files';
-import type { FilesSnapshot } from '../model/files';
+import type { FilesProgressSnapshot, FilesSnapshot } from '../model/files';
 import { ExtensionAutoClient } from '../auto-send/extension-auto-client';
 import type { AutoSnapshot } from '../shared/auto-send-protocol';
 import type { AutoTask } from '../model/auto-send';
@@ -19,6 +19,7 @@ export class FilesController {
   private state: FilesSnapshot = initialFiles();
   private task?: AutoTask;
   private queueRevision = -1;
+  private progressRevision = -1;
   private pendingSelection?: string;
   private open = false;
   private importing = false;
@@ -52,8 +53,10 @@ export class FilesController {
       else { this.mount?.dispose(); this.mount = undefined; this.target = undefined; }
       this.render();
     }), this.page.observe(() => this.reconcile()), this.auto.subscribe(snapshot => this.accept(snapshot)));
-    const changed = (message: { type?: string }, sender: chrome.runtime.MessageSender) => {
-      if (sender.id !== chrome.runtime.id || sender.tab || message.type !== 'files:changed') return false;
+    const changed = (message: FilesProgressSnapshot & { type?: string }, sender: chrome.runtime.MessageSender) => {
+      if (sender.id !== chrome.runtime.id || sender.tab) return false;
+      if (message.type === 'files:progress') { this.acceptProgress(message); return false; }
+      if (message.type !== 'files:changed') return false;
       clearTimeout(this.refreshTimer); this.refreshTimer = setTimeout(() => { void this.refresh(); void this.refreshGallery(); }, 80); return false;
     };
     chrome.runtime.onMessage.addListener(changed);
@@ -66,7 +69,8 @@ export class FilesController {
     this.cleanups.push(() => { clearInterval(timer); clearTimeout(this.refreshTimer); chrome.runtime.onMessage.removeListener(changed);
       win.removeEventListener('focus', focus); win.removeEventListener('resize', fit); win.visualViewport?.removeEventListener('resize', fit);
       this.page.document.removeEventListener('visibilitychange', visibility); });
-    fit(); this.reconcile(); void this.refresh(); void this.auto.request({ type: 'auto:snapshot' }).then(snapshot => this.accept(snapshot), error => this.error(error));
+    fit(); this.reconcile(); void this.refresh(); void this.refreshProgress();
+    void this.auto.request({ type: 'auto:snapshot' }).then(snapshot => this.accept(snapshot), error => this.error(error));
   }
   private reconcile(): void {
     if (!this.ui.launcher.isConnected) this.page.mountFilesLauncher(this.ui.launcher);
@@ -93,6 +97,14 @@ export class FilesController {
     this.render();
   }
   private selection(): string | undefined { return this.pendingSelection ?? this.task?.highlightedItemId ?? this.state.selected; }
+  private acceptProgress(snapshot: FilesProgressSnapshot): void {
+    if (this.disposed || snapshot.revision < this.progressRevision) return;
+    this.progressRevision = snapshot.revision; this.ui.grid.setProgress(snapshot.items);
+  }
+  private async refreshProgress(): Promise<void> {
+    try { this.acceptProgress(await filesRequestValue<FilesProgressSnapshot>({ type: 'files:progress' })); }
+    catch (error) { this.error(error); }
+  }
   private render(): void {
     if (!this.disposed) this.ui.render({ ...this.state, selected: this.selection() }, this.open, this.task, this.importing);
   }
@@ -107,7 +119,7 @@ export class FilesController {
     try {
       const gallery = await readGallery();
       if (gallery.error) throw new Error(gallery.error);
-      this.fields.syncUploads(gallery.uploads); await this.refresh();
+      this.fields.syncUploads(gallery.uploads); await this.refresh(); await this.refreshProgress();
     } catch (error) { this.error(error); }
     finally { this.galleryPending = false; }
   }

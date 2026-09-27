@@ -23,3 +23,12 @@
 .ctrlem-db-files-card[aria-pressed=true] { outline: 3px solid var(--accent-primary); outline-offset: 2px; }
 .ctrlem-db-files-card:focus-visible { outline: 3px solid var(--text-primary); outline-offset: 2px; }
 .ctrlem-db-files-no-preview, .ctrlem-db-files-card:not(:has(img)) { background-image: repeating-linear-gradient(135deg, transparent 0 6px, var(--border-color) 6px 8px); }
+.ctrlem-db-files-progress { position: absolute; inset: 0; pointer-events: none; }
+.ctrlem-db-files-progress-fill { position: absolute; inset: auto 0 0; height: var(--files-progress); background: color-mix(in srgb, var(--files-accent) 28%, transparent); transition: height .18s linear; }
+.ctrlem-db-files-progress-label { position: absolute; inset: auto 0 0; padding: 5px 3px; background: color-mix(in srgb, var(--bg-tertiary) 90%, transparent); color: var(--text-primary); font-size: .75rem; line-height: 1.3; text-align: center; white-space: pre-line; }
+.ctrlem-db-files-progress[data-indeterminate=true] .ctrlem-db-files-progress-fill { animation: ctrlem-db-files-pulse 1.6s ease-in-out infinite alternate; }
+@keyframes ctrlem-db-files-pulse { from { opacity: .25; } to { opacity: .65; } }
+@media (prefers-reduced-motion: reduce) {
+  .ctrlem-db-files-progress-fill { transition: none; }
+  .ctrlem-db-files-progress[data-indeterminate=true] .ctrlem-db-files-progress-fill { animation: none; opacity: .45; }
+}
