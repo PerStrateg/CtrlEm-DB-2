@@ -10,14 +10,14 @@ export interface PickerViewState {
   categories: PickerCategory[]; items: Item[]; selection: PickerSelection;
   loading: boolean; loadError: boolean; error?: string;
   image: boolean; previews: boolean; previewBusy: boolean;
-  canDeleteImages?: boolean; deleteBusy?: boolean; deleteError?: string;
+  canDeleteItems?: boolean; deleteBusy?: boolean; deleteError?: string;
   emptyMessage?: string;
   mediaType?: MediaType;
 }
 interface PickerActions {
   category(id: string): void;
   select(id: string): void;
-  deleteImage(id: string): void;
+  deleteItem(id: string): void;
   edit(create: boolean, initiator: HTMLElement): void;
   previews(enabled: boolean): void;
   retry(): void;
@@ -38,6 +38,10 @@ export class ContentPickerView {
   private readonly rows = new Map<string, HTMLButtonElement>();
   private categoryId?: string;
   private images?: VisibleImages;
+  private deleteFocus?: { id: string; index: number; button: HTMLButtonElement };
+  private readonly resize = () => {
+    for (const row of this.rows.values()) if (row.matches(':hover, :focus')) this.measureCaption(row);
+  };
 
   constructor(private readonly document: Document, label: string, actions: PickerActions, private readonly imageLoader?: ImageLoader) {
     this.element = document.createElement('section');
@@ -69,11 +73,16 @@ export class ContentPickerView {
     this.edit.addEventListener('click', () => actions.edit(false, this.edit));
     this.retry.addEventListener('click', actions.retry);
     this.previews.addEventListener('change', () => actions.previews(this.previews.checked));
+    document.defaultView!.addEventListener('resize', this.resize);
     this.items.addEventListener('click', event => {
       const preview = (event.target as Element).closest<HTMLButtonElement>('button[data-preview-id]');
       if (preview) { actions.preview(preview.dataset.previewId!, preview); return; }
       const remove = (event.target as Element).closest<HTMLButtonElement>('button[data-delete-id]');
-      if (remove) { actions.deleteImage(remove.dataset.deleteId!); return; }
+      if (remove) {
+        if (document.activeElement === remove) this.deleteFocus = { id: remove.dataset.deleteId!,
+          index: Array.from(this.items.children).indexOf(remove.parentElement!), button: remove };
+        actions.deleteItem(remove.dataset.deleteId!); return;
+      }
       const row = (event.target as Element).closest<HTMLButtonElement>('button[data-item-id]');
       if (row) actions.select(row.dataset.itemId!);
     });
@@ -120,14 +129,17 @@ export class ContentPickerView {
         row = this.document.createElement('button'); row.type = 'button'; row.dataset.itemId = item.id;
         row.className = 'ctrlem-db-picker-select';
         const card = this.document.createElement('div'); card.className = 'ctrlem-db-picker-card'; card.append(row);
-        const caption = this.document.createElement('span'); row.append(caption);
+        const viewport = this.document.createElement('span'); viewport.className = 'ctrlem-db-picker-caption';
+        const caption = this.document.createElement('span'); caption.className = 'ctrlem-db-picker-caption-text'; viewport.append(caption); row.append(viewport);
+        const measure = () => this.measureCaption(row!);
+        row.addEventListener('pointerenter', measure); row.addEventListener('focus', measure);
         this.rows.set(item.id, row);
       }
-      const caption = row.querySelector('span')!;
+      const caption = row.querySelector('.ctrlem-db-picker-caption-text')!;
       const label = item.label || item.value;
       if (caption.textContent !== label) caption.textContent = label;
       row.title = item.label ? `${item.label}\n${item.value}` : item.value;
-      row.setAttribute('aria-label', label);
+      row.setAttribute('aria-label', state.image ? label : row.title);
       row.setAttribute('aria-pressed', String(state.selection.itemId === item.id));
       this.images?.set(row, state.image && state.previews ? item.value : undefined);
       const card = row.parentElement!;
@@ -141,19 +153,43 @@ export class ContentPickerView {
         preview.setAttribute('aria-label', `Preview ${label}`);
       } else preview?.remove();
       let remove = card.querySelector<HTMLButtonElement>('[data-delete-id]');
-      if (state.image && state.canDeleteImages) {
+      if (state.canDeleteItems) {
         if (!remove) {
           remove = this.document.createElement('button'); remove.type = 'button';
           remove.className = 'ctrlem-db-picker-delete'; remove.dataset.deleteId = item.id;
           remove.textContent = '×'; card.append(remove);
         }
-        remove.setAttribute('aria-label', 'Delete image'); remove.disabled = Boolean(state.deleteBusy);
+        remove.setAttribute('aria-label', state.image ? 'Delete image' : `Delete ${label}`);
+        remove.title = state.image ? 'Delete image' : `Delete ${row.title}`; remove.disabled = Boolean(state.deleteBusy);
       } else remove?.remove();
       if (this.items.children[index] !== card) this.items.insertBefore(card, this.items.children[index] ?? null);
+      if (!state.image && row.matches(':hover, :focus')) this.measureCaption(row);
     });
     if (this.categoryId !== state.selection.categoryId) this.items.scrollTop = 0;
     this.categoryId = state.selection.categoryId;
+    const focus = this.deleteFocus;
+    if (focus && (!this.rows.has(focus.id) || !state.deleteBusy)) {
+      this.deleteFocus = undefined;
+      if (this.document.activeElement === this.document.body || this.document.activeElement === focus.button) {
+        const card = this.rows.get(focus.id)?.parentElement ?? this.items.children[Math.min(focus.index, this.items.children.length - 1)];
+        const target = card?.querySelector<HTMLButtonElement>('[data-delete-id]:enabled, [data-item-id]');
+        (target ?? this.categories).focus({ preventScroll: true });
+      }
+    }
+  }
+  private measureCaption(row: HTMLButtonElement): void {
+    if (this.items.classList.contains('ctrlem-db-picker-grid')) return;
+    const viewport = row.querySelector<HTMLElement>('.ctrlem-db-picker-caption')!;
+    const caption = row.querySelector<HTMLElement>('.ctrlem-db-picker-caption-text')!;
+    // Translation changes the viewport's scrollable overflow, but not the text's
+    // own width. Measuring the caption keeps an active animation stable on render.
+    const distance = Math.max(0, Math.ceil(caption.getBoundingClientRect().width) - viewport.clientWidth);
+    row.classList.toggle('ctrlem-db-picker-overflow', distance > 0);
+    if (!distance) return;
+    const offset = `${-distance}px`, duration = `${Math.max(2, distance / 32)}s`;
+    if (row.style.getPropertyValue('--picker-caption-offset') !== offset) row.style.setProperty('--picker-caption-offset', offset);
+    if (row.style.getPropertyValue('--picker-caption-duration') !== duration) row.style.setProperty('--picker-caption-duration', duration);
   }
   suspend(): void { this.images?.suspend(); }
-  dispose(): void { this.images?.dispose(); this.element.remove(); }
+  dispose(): void { this.document.defaultView!.removeEventListener('resize', this.resize); this.images?.dispose(); this.element.remove(); }
 }

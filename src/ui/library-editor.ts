@@ -6,7 +6,7 @@ export interface CategoryRow { id: string; name: string; count: number; deleted?
 export interface EditorViewState {
   loading: boolean; error?: string; type: ContentType; categories: CategoryRow[];
   draft?: EditorDraft; status: string; nameError?: string; invalidLines: number[];
-  conflict: boolean; canOverwrite: boolean; sessionError: boolean; busy: boolean; removingImage?: boolean;
+  conflict: boolean; canOverwrite: boolean; sessionError: boolean; busy: boolean; removingItem?: boolean;
 }
 export interface EditorActions {
   retryLoad(): void;
@@ -206,7 +206,7 @@ export class LibraryEditorView {
       if (state.draft) this.name.focus();
       else this.get<HTMLButtonElement>('.ctrlem-db-create').focus();
     }
-    this.get('.ctrlem-db-category-editor').inert = Boolean(state.removingImage);
+    this.get('.ctrlem-db-category-editor').inert = Boolean(state.removingItem);
     const wrap = state.type === 'text' ? 'soft' : 'off';
     if (this.text.wrap !== wrap) this.text.wrap = wrap;
     if (!state.draft) return;
