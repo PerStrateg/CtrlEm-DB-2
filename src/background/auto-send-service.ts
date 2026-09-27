@@ -346,7 +346,7 @@ export class AutoSendService {
             (!manual(current) && !manual(candidate) && current.selectionRevision !== candidate.selectionRevision)) return false;
           this.fileUpload = { id: candidate.id, itemId: candidate.preparedItemId!, abort }; return true;
         });
-        try { if (allowed) fileValue = await this.files!.resolve(candidate.preparedItemId!, abort.signal); else reason = 'interrupted'; }
+        try { if (allowed) fileValue = await this.files!.resolve(candidate.preparedItemId!, abort.signal, candidate.tabId); else reason = 'interrupted'; }
         catch (error) { reason = 'file'; fileError = error instanceof Error ? error.message : 'Image upload failed.'; }
         finally { this.fileUpload = undefined; }
       }

@@ -6,12 +6,25 @@ import type { CaptureClient, TransferClient } from '../shared/library-protocol';
 import type { CaptureResult } from '../model/input-capture';
 import type { ImportMode, ImportResult, LibraryFile } from '../model/library-file';
 import type { UploadAddition, UploadAdditionResult } from '../model/upload-addition';
+import { classifyDiagnosticError, recordDiagnostic } from '../diagnostics/session-log';
 
 export class ExtensionLibraryClient implements LibraryClient, PickerClient, CaptureClient, TransferClient {
   private async request<T>(request: LibraryRequest): Promise<T> {
-    const reply: Reply<T> = await chrome.runtime.sendMessage(request);
-    if (!reply.ok) throw new Error(reply.error);
-    return reply.value;
+    const started = performance.now();
+    try {
+      const reply: Reply<T> = await chrome.runtime.sendMessage(request);
+      if (!reply.ok) throw new Error(reply.error);
+      const conflict = (reply.value as { status?: string } | undefined)?.status === 'conflict';
+      // Routine picker reads and autosaves are noisy; keep failures, conflicts,
+      // slow operations and explicit changes, without serializing their payload.
+      if (conflict || performance.now() - started > 1000 || !['picker:load', 'picker:select', 'library:session'].includes(request.type)) {
+        recordDiagnostic('library', { request: request.type, outcome: conflict ? 'conflict' : 'success', durationMs: Math.round(performance.now() - started) });
+      }
+      return reply.value;
+    } catch (error) {
+      recordDiagnostic('library', { request: request.type, outcome: 'failed', durationMs: Math.round(performance.now() - started), code: classifyDiagnosticError(error) });
+      throw error;
+    }
   }
   load(): Promise<LoadedLibrary> { return this.request({ type: 'library:load' }); }
   addUpload(command: 'popupImage' | 'changeWallpaper' | 'popupSound' | 'videoOverlay', addition: UploadAddition): Promise<UploadAdditionResult> {

@@ -5,6 +5,7 @@ import type { ImportReview } from '../model/library-import';
 
 interface TransferActions {
   export(): void;
+  exportLog(): void;
   file(file: File): void;
   restoreDefaults(): void;
   confirm(): void;
@@ -17,6 +18,7 @@ export class LibraryTransferView {
   private readonly controls: HTMLFieldSetElement;
   private readonly panel: HTMLElement;
   private readonly status: HTMLElement;
+  private readonly logButton: HTMLButtonElement;
   private initiator?: HTMLElement;
   private busyFocus?: HTMLElement;
   constructor(private readonly document: Document, actions: TransferActions) {
@@ -30,11 +32,14 @@ export class LibraryTransferView {
       </div>
       <input type="file" accept=".json,application/json" hidden>
       <div class="ctrlem-db-transfer-panel" hidden></div>
-      </fieldset><p role="status"></p>`;
+      </fieldset><div class="ctrlem-db-actions"><button type="button" data-transfer="log">Export log</button></div>
+      <p>Log for this tab only. Resets when the page reloads; up to 5 MB. Includes operation timings and error codes, without messages, filenames, media URLs or credentials.</p><p role="status"></p>`;
     this.controls = this.element.querySelector('fieldset')!;
     this.element.querySelector('[data-transfer=import]')!.after(createInfoButton(document, 'About imports', 'Supports userscript versions 1–2 and CtrlEm DB backups. Choose a file, then click Replace DB to complete the import.'));
     this.panel = this.element.querySelector('.ctrlem-db-transfer-panel')!;
     this.status = this.element.querySelector('[role=status]')!;
+    this.logButton = this.element.querySelector('[data-transfer=log]')!;
+    this.logButton.addEventListener('click', actions.exportLog);
     const file = this.element.querySelector('input')!;
     for (const action of ['library', 'import', 'defaults']) {
       const button = this.element.querySelector<HTMLButtonElement>(`[data-transfer=${action}]`)!;
@@ -55,9 +60,10 @@ export class LibraryTransferView {
     });
   }
   available(enabled: boolean): void {
-    this.element.hidden = !enabled;
+    this.controls.hidden = !enabled;
   }
   busy(busy: boolean): void {
+    this.logButton.disabled = busy;
     if (this.controls.disabled === busy) return;
     if (busy && this.controls.contains(this.document.activeElement)) this.busyFocus = this.document.activeElement as HTMLElement;
     this.controls.disabled = busy;

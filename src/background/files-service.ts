@@ -4,11 +4,13 @@ import type { FileProcess } from '../shared/files-protocol';
 import { FilesRepository } from '../storage/files-store';
 import { NativeUploads } from '../site/native-uploads';
 import { WriteQueue } from '../storage/library-store';
+import { reportTabDiagnostic } from '../diagnostics/relay';
+import { classifyDiagnosticError, diagnosticMime } from '../diagnostics/session-log';
 
 export interface FilesSource {
   items(): Promise<{ id: string }[]>;
   prepare(tabId: number, id: string, signal: AbortSignal): Promise<void>;
-  resolve(id: string, signal: AbortSignal): Promise<string>;
+  resolve(id: string, signal: AbortSignal, tabId: number): Promise<string>;
 }
 
 export class FilesService implements FilesSource {
@@ -46,11 +48,14 @@ export class FilesService implements FilesSource {
   }
   private async process(tabId: number, id: string, part: 'preview' | 'prepared', signal: AbortSignal): Promise<void> {
     const state = await this.repository.read();
-    if (!state.items.some(item => item.id === id)) throw new Error('File no longer available.');
+    const item = state.items.find(item => item.id === id);
+    if (!item) throw new Error('File no longer available.');
     const token = crypto.randomUUID(), abort = new AbortController();
     const cancel = () => abort.abort(); signal.addEventListener('abort', cancel, { once: true });
     const message: FileProcess = { type: 'files:process', token, id, part, generation: state.generation };
     this.jobs.set(token, { tabId, id, part, generation: state.generation, abort });
+    const startedAt = performance.now();
+    if (part === 'prepared') reportTabDiagnostic(tabId, 'files.prepare', { outcome: 'start', stage: 'encode', inputBytes: item.size, mime: diagnosticMime(item.mime) });
     let timer: ReturnType<typeof setTimeout> | undefined;
     const cancelled = new Promise<never>((_, reject) => {
       abort.signal.addEventListener('abort', () => {
@@ -63,9 +68,15 @@ export class FilesService implements FilesSource {
       if (signal.aborted) cancel();
       const reply = await Promise.race([chrome.tabs.sendMessage(tabId, message), cancelled]);
       if (!reply?.ok) throw new Error(reply?.error ?? 'Image processor unavailable. Reload the page.');
+      if (part === 'prepared') reportTabDiagnostic(tabId, 'files.prepare', { outcome: 'success', stage: 'encode', durationMs: performance.now() - startedAt, outputBytes: reply.bytes });
+    } catch (error) {
+      if (part === 'prepared') reportTabDiagnostic(tabId, 'files.prepare', { outcome: abort.signal.aborted ? 'cancelled' : 'failed', stage: 'encode', durationMs: performance.now() - startedAt, code: classifyDiagnosticError(error) });
+      throw error;
     } finally { clearTimeout(timer); signal.removeEventListener('abort', cancel); this.jobs.delete(token); }
   }
-  resolve(id: string, signal: AbortSignal): Promise<string> {
+  resolve(id: string, signal: AbortSignal, tabId: number): Promise<string> {
+    const startedAt = performance.now();
+    reportTabDiagnostic(tabId, 'files.prepare', { outcome: 'start', stage: 'upload' });
     return this.uploadsQueue.run(async () => {
       signal.throwIfAborted();
       const state = await this.repository.read(), item = state.items.find(item => item.id === id);
@@ -90,6 +101,12 @@ export class FilesService implements FilesSource {
         for (const file of current.items) if (file.uploadId && file.id !== id && !uploads.some(upload => upload.id === file.uploadId)) delete file.uploadId;
       }));
       this.changed(); return `https://ctrlem.com${uploaded.url}`;
+    }).then(url => {
+      reportTabDiagnostic(tabId, 'files.prepare', { outcome: 'success', stage: 'upload', durationMs: performance.now() - startedAt });
+      return url;
+    }, error => {
+      reportTabDiagnostic(tabId, 'files.prepare', { outcome: signal.aborted ? 'cancelled' : 'failed', stage: 'upload', durationMs: performance.now() - startedAt, code: classifyDiagnosticError(error) });
+      throw error;
     });
   }
   async preferences(change: Partial<Pick<FilesSnapshot, 'previews' | 'interval' | 'selected'>>): Promise<FilesSnapshot> {

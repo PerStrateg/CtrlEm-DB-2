@@ -10,6 +10,7 @@ import type { AutoSnapshot } from '../shared/auto-send-protocol';
 import type { AutoTask } from '../model/auto-send';
 import type { AutoSendPage } from '../site/auto-send-page';
 import type { ImportFile } from './import-files';
+import { classifyDiagnosticError, recordDiagnostic } from '../diagnostics/session-log';
 
 export class FilesController {
   private readonly ui: FilesPanel;
@@ -126,9 +127,11 @@ export class FilesController {
   }
   private async import(files: ImportFile[]): Promise<void> {
     if (this.importing || !files.length) return;
+    const started = performance.now();
     const sequence = ++this.importGeneration;
     const sorted = files.filter(({ file }) => /\.(jpe?g|png|gif|webp|bmp|avif|tiff?)$/i.test(file.name))
       .sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true }));
+    recordDiagnostic('files.import', { outcome: 'start', count: sorted.length, bytes: sorted.reduce((sum, { file }) => sum + file.size, 0) });
     this.importing = true; this.render();
     try {
       const initial = await readFiles();
@@ -139,7 +142,12 @@ export class FilesController {
       }
       if (sequence === this.importGeneration) this.ui.message(sorted.length ? '' : 'Choose JPG, PNG, GIF, WebP, BMP, AVIF or TIFF images.');
       await this.refresh();
-    } catch (error) { this.error(error); await this.refresh(); }
+      recordDiagnostic('files.import', { outcome: sequence === this.importGeneration && !this.disposed ? 'success' : 'cancelled',
+        count: sorted.length, durationMs: Math.round(performance.now() - started) });
+    } catch (error) {
+      recordDiagnostic('files.import', { outcome: 'failed', code: classifyDiagnosticError(error), durationMs: Math.round(performance.now() - started) });
+      this.error(error); await this.refresh();
+    }
     finally { this.importing = false; this.render(); }
   }
   private async clear(): Promise<void> {

@@ -6,6 +6,7 @@ import type { ContentType, Library } from '../model/library';
 import type { LibraryClient, TransferClient } from '../shared/library-protocol';
 import { LibraryTransferView } from '../ui/library-transfer';
 import { defaultLibraryFile } from '../model/default-library';
+import { exportDiagnosticLog } from '../diagnostics/session-log';
 
 export interface TransferEditor {
   transferState(): { library: Library; categoryId?: string; type: ContentType; hasDrafts: boolean; available: boolean };
@@ -22,6 +23,7 @@ export class TransferController {
   constructor(container: HTMLElement, private readonly client: LibraryClient & TransferClient, private readonly editor: TransferEditor) {
     this.view = new LibraryTransferView(container.ownerDocument, {
       export: () => { void this.export(false); },
+      exportLog: () => { void this.exportLog(); },
       file: file => { void this.readFile(file); },
       restoreDefaults: () => { void this.restoreDefaults(); },
       confirm: () => { void this.confirm(); }, cancel: () => { this.pending = undefined; this.view.close(); this.view.message(''); },
@@ -61,6 +63,18 @@ export class TransferController {
       document.defaultView!.setTimeout(() => urlApi.revokeObjectURL(url), 0);
       this.view.close(false); this.view.message(savedOnly ? 'Exported saved version. Drafts are not included.' : 'Export ready.');
     }, 'Couldn’t export. Retry Export DB.');
+  }
+  private async exportLog(): Promise<void> {
+    await this.run(async () => {
+      const document = this.view.element.ownerDocument;
+      const window = document.defaultView!;
+      const url = window.URL.createObjectURL(new window.Blob([exportDiagnosticLog()], { type: 'application/x-ndjson' }));
+      const link = document.createElement('a');
+      link.href = url; link.download = `ctrlem-db-log-${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`;
+      document.body.append(link); link.click(); link.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 0);
+      this.view.message('Session log ready.');
+    }, 'Couldn’t export the log. Retry Export log.');
   }
   private async readFile(file: File): Promise<void> {
     await this.run(async () => {

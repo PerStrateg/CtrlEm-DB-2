@@ -3,6 +3,7 @@ import { uploadPortName, uploadChunkBytes, uploadKeepAliveMs, uploadTimeoutMs } 
 import type { UploadMessage, UploadReply } from '../shared/upload-protocol';
 import type { ProviderId, UploadType } from './providers';
 import type { Reply } from '../shared/library-protocol';
+import { classifyDiagnosticError, diagnosticBrowserError, diagnosticMime, recordDiagnostic } from '../diagnostics/session-log';
 
 export interface UploadClient {
   catboxAllowed?(): Promise<boolean>;
@@ -35,6 +36,9 @@ export class ExtensionUploadClient implements UploadClient {
   }
 
   async upload(provider: ProviderId, media: UploadType, file: File, signal: AbortSignal): Promise<string> {
+    const started = performance.now();
+    const diagnostic = { provider, bytes: file.size, mime: diagnosticMime(file.type) };
+    recordDiagnostic('upload', { ...diagnostic, outcome: 'start' });
     const port = chrome.runtime.connect({ name: uploadPortName });
     let pending: { resolve(value: UploadReply): void; reject(error: Error): void } | undefined;
     let disconnected = false;
@@ -66,7 +70,18 @@ export class ExtensionUploadClient implements UploadClient {
         });
         await send({ type: 'chunk', data });
       }
-      return (await send({ type: 'finish' })).url!;
+      const url = (await send({ type: 'finish' })).url!;
+      recordDiagnostic('upload', { ...diagnostic, outcome: 'success', durationMs: Math.round(performance.now() - started) });
+      return url;
+    } catch (error) {
+      const failure = error instanceof UploadError ? error.failure : undefined;
+      recordDiagnostic('upload', { ...diagnostic, outcome: signal.aborted ? 'cancelled' : 'failed',
+        durationMs: Math.round(performance.now() - started), code: failure?.code ?? classifyDiagnosticError(error),
+        stage: failure?.stage, status: failure?.status ?? failure?.network?.status, anonymous: failure?.anonymous,
+        observation: failure?.network?.observation, hostPermission: failure?.network?.hostPermission,
+        observerPermission: failure?.network?.observerPermission, redirected: failure?.network?.redirected,
+        originMissing: failure?.network?.originMissing, browserError: diagnosticBrowserError(failure?.network?.browserError) });
+      throw error;
     } finally {
       clearInterval(heartbeat); clearTimeout(timeout);
       signal.removeEventListener('abort', stop);

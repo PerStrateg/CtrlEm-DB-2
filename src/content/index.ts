@@ -29,6 +29,9 @@ import { ResultsController } from '../ui/results-controller';
 import { RedgifsController } from '../redgifs/redgifs-controller';
 import { FilesController } from '../files/files-controller';
 import '../ui/files.css';
+import { diagnosticCommand, recordDiagnostic, startDiagnosticSession } from '../diagnostics/session-log';
+import { observeSiteErrors } from '../site/result-errors';
+import { bindDiagnosticRelay } from '../diagnostics/relay';
 
 // This global belongs to the extension's isolated world, not the page's scripts.
 // Reinjection replaces the previous controller and releases its DOM bindings.
@@ -37,6 +40,11 @@ const runtime = globalThis as typeof globalThis & {
 };
 
 runtime.ctrlEmLibraryController?.dispose();
+startDiagnosticSession(document, chrome.runtime.getManifest().version);
+const stopSiteErrors = observeSiteErrors(document, error => recordDiagnostic('site.error', {
+  command: diagnosticCommand(error.command), code: error.code, existing: error.existing, outcome: 'failed',
+}));
+const unbindDiagnostics = bindDiagnosticRelay();
 const stopInfoTips = mountInfoTips(document);
 const page = new CtrlEmPage(document);
 const results = new ResultsController();
@@ -67,7 +75,7 @@ const redgifs = new RedgifsController(page, results, async url => {
   await autoSend.queueCommand(command);
 });
 const files = new FilesController(page, results, fields, autoPage);
-runtime.ctrlEmLibraryController = { dispose: () => { stopInfoTips(); files.dispose(); redgifs.dispose(); autoSend.dispose(); unbindAuto(); uploads.dispose(); capture.dispose(); transfer?.dispose(); pickers.dispose(); editor.dispose(); shell.dispose(); } };
+runtime.ctrlEmLibraryController = { dispose: () => { recordDiagnostic('session.end'); unbindDiagnostics(); stopSiteErrors(); stopInfoTips(); files.dispose(); redgifs.dispose(); autoSend.dispose(); unbindAuto(); uploads.dispose(); capture.dispose(); transfer?.dispose(); pickers.dispose(); editor.dispose(); shell.dispose(); } };
 shell.start();
 editor.start();
 pickers.start();

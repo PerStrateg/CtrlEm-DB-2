@@ -18,7 +18,8 @@ chrome.runtime.onMessage.addListener((input, sender, respond) => {
   const heartbeat = setInterval(() => { void chrome.runtime.sendMessage({ type: 'files:heartbeat' }); }, 20_000);
   const run = async () => {
     if (cancelled.has(job.token)) throw new Error('Image preparation cancelled.');
-    if (await store.get(job.id, job.part)) return;
+    const cached = await store.get(job.id, job.part);
+    if (cached) return cached.size;
     const blob = await store.get(job.id, 'original');
     if (!blob) throw new Error('Local image is unavailable.');
     if (cancelled.has(job.token)) throw new Error('Image preparation cancelled.');
@@ -32,11 +33,12 @@ chrome.runtime.onMessage.addListener((input, sender, respond) => {
     });
     if (cancelled.has(job.token)) throw new Error('Image preparation cancelled.');
     await client.put(output, { id: job.id, generation: job.generation, part: job.part, token: job.token });
+    return output.size;
   };
   const work = job.part === 'preview' ? previews.then(run) : preparations.then(run);
-  if (job.part === 'preview') previews = work.catch(() => {});
-  else preparations = work.catch(() => {});
-  void work.then(() => respond({ ok: true }), error => respond({ ok: false, error: error.message })).finally(() => { clearInterval(heartbeat); cancelled.delete(job.token); });
+  if (job.part === 'preview') previews = work.then(() => {}, () => {});
+  else preparations = work.then(() => {}, () => {});
+  void work.then(bytes => respond({ ok: true, bytes }), error => respond({ ok: false, error: error.message })).finally(() => { clearInterval(heartbeat); cancelled.delete(job.token); });
   return true;
 });
 window.addEventListener('pagehide', () => { for (const job of jobs.values()) job.cancel(); });
