@@ -3,6 +3,7 @@ import type { FilesSnapshot } from '../model/files';
 import { FilesGrid } from './files-grid';
 import type { AutoTask } from '../model/auto-send';
 import { droppedFiles, pickedFiles, type ImportFile } from '../files/import-files';
+import localUploadIllustration from '../../assets/illustrations/ctrlem-grey.svg';
 
 export interface FilesActions {
   toggle(): void; close(): void; add(files: ImportFile[]): Promise<void>; clear(): void; select(id: string): void;
@@ -16,6 +17,7 @@ export class FilesPanel {
   private readonly count: HTMLElement;
   private readonly status: HTMLElement;
   private readonly empty: HTMLElement;
+  private readonly dropzone: HTMLElement;
   private readonly send: HTMLButtonElement;
   private readonly auto: HTMLButtonElement;
   private readonly previews: HTMLInputElement;
@@ -65,30 +67,35 @@ export class FilesPanel {
       button('Clear files', () => { this.confirmation.hidden = true; this.cancelDrop(); actions.clear(); }), button('Cancel', () => { this.confirmation.hidden = true; clear.focus(); }));
     this.confirmation.append(confirmationText, confirmationActions);
     this.status = doc.createElement('p'); this.status.className = 'ctrlem-db-files-status'; this.status.setAttribute('role', 'status'); this.status.hidden = true;
-    this.empty = doc.createElement('p'); this.empty.className = 'ctrlem-db-files-empty';
-    this.empty.textContent = 'Choose local images to send through CtrlEm. JPG, PNG, GIF, WebP, BMP, AVIF and TIFF. Large files resize automatically.';
-    this.empty.append(doc.createElement('br'), 'Files here aren’t added to the library due to CtrlEm limitations.');
-    this.grid = new FilesGrid(doc, actions.select);
-    const dropHint = doc.createElement('p'); dropHint.className = 'ctrlem-db-files-drop-hint';
+    this.empty = doc.createElement('div'); this.empty.className = 'ctrlem-db-files-empty';
+    const dropHint = doc.createElement('p');
     dropHint.textContent = 'Drag & drop images or folders here, or use Add files / Add folder.';
-    this.element.append(bar, this.confirmation, sendBar, dropHint, this.empty, this.grid.element, this.status);
+    const formats = doc.createElement('p'); formats.textContent = 'JPG, PNG, GIF, WebP. Large files resize automatically.';
+    formats.append(doc.createElement('br'), 'Files here aren’t saved to the library due to CtrlEm limitations.');
+    const illustration = doc.createElement('img'); illustration.className = 'ctrlem-db-files-illustration';
+    illustration.src = localUploadIllustration; illustration.alt = 'CtrlEm keeps up to 20 uploaded files for sending.'; illustration.draggable = false;
+    this.empty.append(dropHint, formats, illustration);
+    this.grid = new FilesGrid(doc, actions.select);
+    this.dropzone = doc.createElement('div'); this.dropzone.className = 'ctrlem-db-files-dropzone';
+    this.dropzone.append(this.empty, this.grid.element);
+    this.element.append(bar, this.confirmation, sendBar, this.dropzone, this.status);
     let dragDepth = 0;
-    const clearDrag = () => { dragDepth = 0; this.element.classList.remove('ctrlem-db-files-drag-active'); };
-    this.element.addEventListener('dragenter', event => {
+    const clearDrag = () => { dragDepth = 0; this.dropzone.classList.remove('ctrlem-db-files-drag-active'); };
+    this.dropzone.addEventListener('dragenter', event => {
       if (!event.dataTransfer?.types.includes('Files')) return;
       event.preventDefault(); event.stopPropagation(); dragDepth++;
-      if (!this.importing && !this.readingDrop) this.element.classList.add('ctrlem-db-files-drag-active');
+      if (!this.importing && !this.readingDrop) this.dropzone.classList.add('ctrlem-db-files-drag-active');
     });
-    this.element.addEventListener('dragover', event => {
+    this.dropzone.addEventListener('dragover', event => {
       if (!event.dataTransfer?.types.includes('Files')) return;
       event.preventDefault(); event.stopPropagation();
       event.dataTransfer.dropEffect = this.importing || this.readingDrop ? 'none' : 'copy';
     });
-    this.element.addEventListener('dragleave', event => {
+    this.dropzone.addEventListener('dragleave', event => {
       if (!dragDepth) return;
       event.stopPropagation(); if (--dragDepth === 0) clearDrag();
     });
-    this.element.addEventListener('drop', event => {
+    this.dropzone.addEventListener('drop', event => {
       if (!event.dataTransfer?.types.includes('Files')) return;
       event.preventDefault(); event.stopPropagation(); clearDrag();
       if (this.importing || this.readingDrop) return;
@@ -119,7 +126,7 @@ export class FilesPanel {
     this.auto.setAttribute('aria-label', this.auto.title); this.auto.setAttribute('aria-pressed', String(Boolean(task)));
     this.auto.disabled = !task && !state.items.length; this.send.disabled = !state.selected || !state.items.some(item => item.id === state.selected);
     this.importing = importing; this.updateImportButtons();
-    if (!open) this.element.classList.remove('ctrlem-db-files-drag-active');
+    if (!open) this.dropzone.classList.remove('ctrlem-db-files-drag-active');
     this.grid.render(state.items, state.selected, state.previews && !this.element.ownerDocument.hidden, open);
   }
   dispose(): void { this.cancelDrop(); this.grid.dispose(); this.element.remove(); this.launcher.remove(); }

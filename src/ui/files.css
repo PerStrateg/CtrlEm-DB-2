@@ -1,9 +1,9 @@
 .ctrlem-db-image-heading { display: flex; align-items: center; gap: 8px; }
 .ctrlem-db-image-heading > [data-acc] { flex: 1; min-width: 0; }
 .ctrlem-db-files-open > :not(.ctrlem-db-files) { display: none !important; }
-.ctrlem-db-files { --files-accent: #d99a60; display: flex; flex-direction: column; min-width: 0; height: var(--ctrlem-db-files-height); border: 2px dashed var(--files-accent); border-radius: 10px; background: color-mix(in srgb, var(--files-accent) 5%, var(--bg-tertiary)); }
+.ctrlem-db-files { --files-accent: #d99a60; display: flex; flex-direction: column; min-width: 0; height: var(--ctrlem-db-files-height); }
+.ctrlem-db-files-dropzone { display: flex; flex-direction: column; flex: 1; min-height: 0; margin: 0 16px 12px; border: 2px dashed var(--files-accent); border-radius: 10px; background: color-mix(in srgb, var(--files-accent) 5%, var(--bg-tertiary)); }
 .ctrlem-db-files-drag-active { background: color-mix(in srgb, var(--files-accent) 14%, var(--bg-tertiary)); box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--files-accent) 20%, transparent); }
-.ctrlem-db-files-drop-hint { flex-shrink: 0; margin: 0 16px 8px; color: var(--text-secondary); font-size: .8rem; }
 .ctrlem-db-files-bar { display: flex; gap: 8px; padding: 12px 16px; align-items: center; flex-wrap: wrap; }
 .ctrlem-db-files-send-bar { padding-top: 0; }
 .ctrlem-db-files-send-bar > label:last-child { margin-left: auto; }
@@ -13,7 +13,10 @@
 .ctrlem-db-files-count { margin-left: auto; font-size: .85rem; color: var(--text-secondary); }
 .ctrlem-db-files-status, .ctrlem-db-files-confirm { margin: 8px 16px; font-size: .85rem; overflow-wrap: anywhere; }
 .ctrlem-db-files-status { flex-shrink: 0; padding: 6px 0; }
-.ctrlem-db-files-empty { margin: 12px 24px; align-self: center; text-align: center; color: var(--text-secondary); font-size: .8rem; line-height: 1.4; }
+.ctrlem-db-files-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; flex: 1; min-height: 0; overflow: auto; padding: 16px; text-align: center; color: var(--text-secondary); font-size: .8rem; line-height: 1.4; }
+.ctrlem-db-files-empty p { flex-shrink: 0; margin: 0; }
+.ctrlem-db-files-illustration { display: block; flex: 1; width: min(100%, 320px); height: 0; min-height: 0; max-height: 300px; object-fit: contain; opacity: .55; }
+.ctrlem-db-files-empty:not([hidden]) + .ctrlem-db-files-grid { display: none; }
 .ctrlem-db-files [hidden] { display: none !important; }
 .ctrlem-db-files-grid { overflow: auto; flex: 1; min-height: 0; padding: 8px; }
 .ctrlem-db-files-canvas { position: relative; }
