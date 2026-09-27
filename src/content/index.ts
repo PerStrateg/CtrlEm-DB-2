@@ -42,7 +42,7 @@ const runtime = globalThis as typeof globalThis & {
 runtime.ctrlEmLibraryController?.dispose();
 startDiagnosticSession(document, chrome.runtime.getManifest().version);
 const stopSiteErrors = observeSiteErrors(document, error => recordDiagnostic('site.error', {
-  command: diagnosticCommand(error.command), code: error.code, existing: error.existing, outcome: 'failed',
+  command: diagnosticCommand(error.command), code: error.code, status: error.status, existing: error.existing, outcome: 'failed',
 }));
 const unbindDiagnostics = bindDiagnosticRelay();
 const stopInfoTips = mountInfoTips(document);

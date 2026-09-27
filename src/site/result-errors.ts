@@ -1,6 +1,7 @@
 export interface SiteResultError {
   command: string;
-  code: 'image-body-decode' | 'image-body-read' | 'stream-error' | 'timeout' | 'network' | 'site-rejected';
+  code: 'http' | 'image-body-decode' | 'image-body-read' | 'stream-error' | 'timeout' | 'network' | 'site-rejected';
+  status?: number;
   existing: boolean;
 }
 
@@ -19,12 +20,13 @@ export function observeSiteErrors(document: Document, report: (error: SiteResult
     if (seen.has(fingerprint)) return;
     if (seen.size === 512) seen.delete(seen.values().next().value!);
     seen.add(fingerprint);
-    const code = /decoding response body/i.test(body) ? 'image-body-decode'
+    const httpStatus = /\bHTTP\s+([1-5]\d{2})\b/i.exec(body)?.[1];
+    const code = httpStatus ? 'http' : /decoding response body/i.test(body) ? 'image-body-decode'
       : /reading image body|reading a body from connection/i.test(body) ? 'image-body-read'
       : /stream error/i.test(body) ? 'stream-error'
       : /timeout|timed out/i.test(body) ? 'timeout'
       : /network|connection/i.test(body) ? 'network' : 'site-rejected';
-    report({ command: body.split(/\s/, 1)[0]!, code, existing });
+    report({ command: body.split(/\s/, 1)[0]!, code, existing, ...(httpStatus ? { status: Number(httpStatus) } : {}) });
   };
   const scan = (element: Element) => {
     if (element.matches('.response-item')) inspect(element);
