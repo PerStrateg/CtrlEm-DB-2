@@ -32,8 +32,7 @@ export class LibraryTransferView {
       </div>
       <input type="file" accept=".json,application/json" hidden>
       <div class="ctrlem-db-transfer-panel" hidden></div>
-      </fieldset><div class="ctrlem-db-actions"><button type="button" data-transfer="log">Export log</button></div>
-      <p>Log for this tab only. Resets when the page reloads; up to 5 MB. Includes operation timings and error codes, without messages, filenames, media URLs or credentials.</p><p role="status"></p>`;
+      </fieldset><div class="ctrlem-db-actions"><button type="button" data-transfer="log">Export session log</button></div><p role="status"></p>`;
     this.controls = this.element.querySelector('fieldset')!;
     this.element.querySelector('[data-transfer=import]')!.after(createInfoButton(document, 'About imports', 'Supports userscript versions 1–2 and CtrlEm DB backups. Choose a file, then click Replace DB to complete the import.'));
     this.panel = this.element.querySelector('.ctrlem-db-transfer-panel')!;
