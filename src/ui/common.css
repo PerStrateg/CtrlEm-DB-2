@@ -33,3 +33,15 @@
 .ctrlem-db-ui input[type='number'] { -moz-appearance: textfield; appearance: textfield; }
 .ctrlem-db-ui input[type='number']::-webkit-inner-spin-button,
 .ctrlem-db-ui input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* Inline confirmation keeps the cancel target inside the visual button. */
+.ctrlem-db-confirm-button { --ctrlem-db-confirm-tint: #d99a60; position: relative; display: inline-flex; min-width: 96px; vertical-align: middle; }
+.ctrlem-db-confirm-button > button:first-child { width: 100%; }
+.ctrlem-db-confirm-button[data-confirming] > button:first-child {
+  padding-right: 32px; background: color-mix(in srgb, var(--ctrlem-db-confirm-tint) 14%, var(--bg-tertiary));
+  border-color: color-mix(in srgb, var(--ctrlem-db-confirm-tint) 35%, var(--border-color));
+}
+.ctrlem-db-confirm-button > button.ctrlem-db-confirm-cancel { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); margin: 0; }
+.ctrlem-db-confirm-button > [hidden] { display: none !important; }
+
+.ctrlem-db-confirm-button[hidden] { display: none !important; }

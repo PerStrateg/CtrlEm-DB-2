@@ -11,7 +11,7 @@
 .ctrlem-db-files-bar input[type=number] { width: 48px; padding-left: 4px; padding-right: 4px; text-align: center; }
 .ctrlem-db-files-bar input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent-primary); }
 .ctrlem-db-files-count { margin-left: auto; font-size: .85rem; color: var(--text-secondary); }
-.ctrlem-db-files-status, .ctrlem-db-files-confirm { margin: 8px 16px; font-size: .85rem; overflow-wrap: anywhere; }
+.ctrlem-db-files-status { margin: 8px 16px; font-size: .85rem; overflow-wrap: anywhere; }
 .ctrlem-db-files-status { flex-shrink: 0; padding: 6px 0; }
 .ctrlem-db-files-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; flex: 1; min-height: 0; overflow: auto; padding: 16px; text-align: center; color: var(--text-secondary); font-size: .8rem; line-height: 1.4; }
 .ctrlem-db-files-empty p { flex-shrink: 0; margin: 0; }

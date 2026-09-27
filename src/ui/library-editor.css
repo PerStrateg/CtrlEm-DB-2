@@ -19,7 +19,7 @@
 .ctrlem-db-category-select { text-align: left; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ctrlem-db-category-list li > button:not(:first-child) { padding: 4px; min-width: 26px; }
 .ctrlem-db-actions { display: flex; flex-wrap: wrap; gap: var(--ctrlem-db-space-2); margin: 8px 0; }
-.ctrlem-db-create-form, .ctrlem-db-delete-confirm, .ctrlem-db-conflict { margin: 12px 0; }
+.ctrlem-db-create-form, .ctrlem-db-conflict { margin: 12px 0; }
 .ctrlem-db-error, .ctrlem-db-create-error { color: var(--danger); }
 .ctrlem-db-error:empty, .ctrlem-db-create-error:empty { display: none; }
 .ctrlem-db-hint, .ctrlem-db-empty { color: var(--text-secondary); }

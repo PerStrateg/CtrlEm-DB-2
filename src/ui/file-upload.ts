@@ -1,3 +1,4 @@
+import { ConfirmButton, cancelConfirmations, bindConfirmationEscape } from './confirm-button';
 import { createInfoButton } from './info-tip';
 import { providers, providerForType, uploadFormats } from '../upload/providers';
 import type { ProviderId, UploadType } from '../upload/providers';
@@ -26,10 +27,13 @@ export class FileUploadView {
   private readonly refresh: HTMLButtonElement;
   private readonly rows: HTMLElement;
   private readonly clearCompleted: HTMLButtonElement;
+  private categoryId?: string;
+  private readonly removals = new Map<string, ConfirmButton>();
   private readonly rowElements = new Map<string, HTMLElement>();
 
-  constructor(private readonly document: Document, readonly type: UploadType, actions: UploadActions) {
+  constructor(private readonly document: Document, readonly type: UploadType, private readonly actions: UploadActions) {
     this.element = document.createElement('section');
+    bindConfirmationEscape(this.element);
     this.element.className = 'ctrlem-db-upload';
     this.element.dataset.provider = providerForType[type];
     this.element.innerHTML = `<div class="upload-dropzone">
@@ -77,20 +81,12 @@ export class FileUploadView {
       const button = (event.target as Element).closest<HTMLButtonElement>('button[data-id]');
       if (!button) return;
       if (button.dataset.action === 'retry') actions.retry(button.dataset.id!);
-      else if (button.dataset.action === 'remove') {
-        const item = button.closest('li')!;
-        const confirm = item.querySelector<HTMLElement>('[data-remove-confirm]')!;
-        if (button.dataset.confirm === 'true') { confirm.hidden = false; confirm.querySelector('button')!.focus(); }
-        else actions.remove(button.dataset.id!);
-      } else if (button.dataset.action === 'confirm-remove') actions.remove(button.dataset.id!);
-      else if (button.dataset.action === 'keep') {
-        button.closest<HTMLElement>('[data-remove-confirm]')!.hidden = true;
-        button.closest('li')!.querySelector<HTMLButtonElement>('[data-action=remove]')!.focus();
-      }
     });
   }
 
   render(rows: UploadRow[], categoryId: string | undefined, loading: boolean, error: string, needsSetup: boolean, needsAccess = false): void {
+    if (this.categoryId !== categoryId) cancelConfirmations(this.element);
+    this.categoryId = categoryId;
     this.zone.hidden = !categoryId;
     this.element.hidden = !categoryId && !rows.length;
     this.files.disabled = loading || Boolean(error);
@@ -109,7 +105,7 @@ export class FileUploadView {
     let restoreFocus = false;
     for (const [id, element] of this.rowElements) if (!ids.has(id)) {
       restoreFocus ||= element.contains(this.document.activeElement);
-      element.remove(); this.rowElements.delete(id);
+      element.remove(); this.rowElements.delete(id); this.removals.delete(id);
     }
     for (const row of rows) {
       let item = this.rowElements.get(row.id);
@@ -121,14 +117,15 @@ export class FileUploadView {
         const retry = this.document.createElement('button'); retry.type = 'button'; retry.className = 'btn btn-secondary'; retry.dataset.action = 'retry'; retry.dataset.id = row.id; retry.textContent = 'Retry upload';
         const remove = this.document.createElement('button'); remove.type = 'button'; remove.className = 'btn btn-secondary';
         remove.dataset.action = 'remove'; remove.dataset.id = row.id;
-        const confirm = this.document.createElement('div'); confirm.dataset.removeConfirm = ''; confirm.hidden = true;
-        const warning = this.document.createElement('p'); warning.textContent = 'Copy the URL above before removing this result. The uploaded file will remain at the provider.';
-        confirm.append(warning);
-        for (const [action, label] of [['confirm-remove', 'Remove result'], ['keep', 'Keep result']]) {
-          const button = this.document.createElement('button'); button.type = 'button'; button.dataset.action = action;
-          button.dataset.id = row.id; button.textContent = label!; confirm.append(button);
-        }
-        item.append(caption, result, retry, remove, confirm); this.rows.append(item); this.rowElements.set(row.id, item);
+        const confirmation = new ConfirmButton(remove, {
+          request: () => {
+            if (remove.dataset.confirm === 'true') confirmation.arm('Copy the URL above before removing this result. The uploaded file will remain at the provider.');
+            else this.actions.remove(row.id);
+          },
+          confirm: () => this.actions.remove(row.id),
+        });
+        this.removals.set(row.id, confirmation);
+        item.append(caption, result, retry, confirmation.element); this.rows.append(item); this.rowElements.set(row.id, item);
       }
       const status = row.status === 'Saving' ? '' : row.status === 'Saved' || row.status === 'Save failed' ? 'Uploaded' : row.status;
       const uploadError = row.status === 'Failed' ? row.error : undefined;
@@ -140,11 +137,12 @@ export class FileUploadView {
       retry.hidden = row.status !== 'Failed' || row.canRetry === false;
       retry.disabled = loading || Boolean(error);
       const remove = item.querySelector<HTMLButtonElement>('[data-action=remove]')!;
-      remove.hidden = !['Waiting', 'Failed', 'Save failed'].includes(row.status);
+      const confirmation = this.removals.get(row.id)!;
+      confirmation.element.hidden = !['Waiting', 'Failed', 'Save failed'].includes(row.status);
+      if (row.status !== 'Save failed') confirmation.reset();
       const removeLabel = row.status === 'Waiting' ? 'Cancel' : 'Remove';
-      if (remove.textContent !== removeLabel) remove.textContent = removeLabel;
+      if (!confirmation.armed && remove.textContent !== removeLabel) remove.textContent = removeLabel;
       remove.dataset.confirm = String(row.status === 'Save failed');
-      if (row.status !== 'Save failed') item.querySelector<HTMLElement>('[data-remove-confirm]')!.hidden = true;
     }
     if (restoreFocus) (Array.from(this.rows.querySelectorAll<HTMLButtonElement>('button'))
       .find(button => !button.disabled && !button.closest('[hidden]')) ?? this.browse).focus();

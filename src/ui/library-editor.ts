@@ -1,3 +1,4 @@
+import { ConfirmButton } from './confirm-button';
 import { createInfoButton } from './info-tip';
 import type { ContentType } from '../model/library';
 import type { EditorDraft } from '../shared/library-protocol';
@@ -30,6 +31,7 @@ export class LibraryEditorView {
   readonly element: HTMLDivElement;
   private readonly formatInfo: HTMLButtonElement;
   private readonly rows = new Map<string, HTMLLIElement>();
+  private readonly deletion: ConfirmButton;
   private selectedId?: string;
   private dragging?: string;
   private state?: EditorViewState;
@@ -74,9 +76,6 @@ export class LibraryEditorView {
               <div class="ctrlem-db-actions"><button type="button" class="ctrlem-db-overwrite">Keep my version</button><button type="button" class="ctrlem-db-latest">Load latest</button></div>
             </div>
             <button type="button" class="ctrlem-db-delete">Delete category</button>
-            <div class="ctrlem-db-delete-confirm" hidden>
-              <p></p><div class="ctrlem-db-actions"><button type="button" class="ctrlem-db-confirm-delete">Delete</button><button type="button" class="ctrlem-db-cancel-delete">Cancel</button></div>
-            </div>
           </div>
         </div>
       </div>`;
@@ -114,17 +113,13 @@ export class LibraryEditorView {
       createInput.setAttribute('aria-invalid', String(Boolean(error)));
       if (!error) { form.hidden = true; createInput.value = ''; }
     });
-    this.get('.ctrlem-db-delete').addEventListener('click', () => {
-      const category = this.state?.categories.find(item => item.id === this.selectedId);
-      this.get('.ctrlem-db-delete-confirm p').textContent = `Delete “${this.name.value}” and its ${category?.count ?? 0} saved items?`;
-      this.get('.ctrlem-db-delete-confirm').hidden = false;
-      this.get<HTMLButtonElement>('.ctrlem-db-cancel-delete').focus();
+    this.deletion = new ConfirmButton(this.get<HTMLButtonElement>('.ctrlem-db-delete'), {
+      request: () => {
+        const category = this.state?.categories.find(item => item.id === this.selectedId);
+        this.deletion.arm(`Delete “${this.name.value}” and its ${category?.count ?? 0} saved items?`);
+      },
+      confirm: actions.remove,
     });
-    this.get('.ctrlem-db-cancel-delete').addEventListener('click', () => {
-      this.get('.ctrlem-db-delete-confirm').hidden = true;
-      this.get<HTMLButtonElement>('.ctrlem-db-delete').focus();
-    });
-    this.get('.ctrlem-db-confirm-delete').addEventListener('click', actions.remove);
     this.list.addEventListener('dragover', event => { if (this.dragging) event.preventDefault(); });
     this.list.addEventListener('drop', event => {
       if (!this.dragging) return;
@@ -149,8 +144,7 @@ export class LibraryEditorView {
   render(state: EditorViewState): void {
     const switched = this.selectedId !== state.draft?.id || this.state?.type !== state.type;
     const creating = this.get('.ctrlem-db-create-form').contains(this.element.ownerDocument.activeElement);
-    const deleting = !this.get('.ctrlem-db-delete-confirm').hidden &&
-      this.get('.ctrlem-db-delete-confirm').contains(this.element.ownerDocument.activeElement);
+    const deleting = this.deletion.armed && this.deletion.element.contains(this.element.ownerDocument.activeElement);
     const previousLines = this.state?.invalidLines.join(',');
     this.state = state;
     this.get('.ctrlem-db-load-status').textContent = state.loading ? 'Loading library…' : state.error ?? '';
@@ -196,7 +190,7 @@ export class LibraryEditorView {
       if (this.list.children[index] !== row) this.list.insertBefore(row, this.list.children[index] ?? null);
     }
     if (switched) {
-      this.get('.ctrlem-db-delete-confirm').hidden = true;
+      this.deletion.reset();
       this.get('.ctrlem-db-create-form').hidden = true;
       this.get('.ctrlem-db-create-error').textContent = '';
     }
@@ -253,7 +247,10 @@ export class LibraryEditorView {
     this.get<HTMLButtonElement>('.ctrlem-db-overwrite').disabled = !state.canOverwrite || state.busy;
     this.get<HTMLButtonElement>('.ctrlem-db-latest').disabled = state.busy;
     this.get('.ctrlem-db-deleted-note').hidden = state.canOverwrite;
-    this.get<HTMLButtonElement>('.ctrlem-db-delete').disabled = state.busy || !state.canOverwrite;
-    this.get<HTMLButtonElement>('.ctrlem-db-confirm-delete').disabled = state.busy;
+    this.deletion.disabled(state.busy || !state.canOverwrite);
+    if (this.deletion.armed) {
+      const category = state.categories.find(item => item.id === this.selectedId);
+      this.deletion.arm(`Delete “${this.name.value}” and its ${category?.count ?? 0} saved items?`);
+    }
   }
 }

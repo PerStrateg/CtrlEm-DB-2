@@ -27,3 +27,6 @@
 .ctrlem-db-upload li { padding: 8px 0; }
 .ctrlem-db-upload li button { margin-top: 8px; margin-right: 8px; }
 .ctrlem-db-upload li input { margin-top: 8px; }
+
+.ctrlem-db-upload li .ctrlem-db-confirm-button { margin: 8px 8px 0 0; }
+.ctrlem-db-upload li .ctrlem-db-confirm-button > button { margin: 0; }

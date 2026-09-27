@@ -1,3 +1,4 @@
+import { cancelConfirmations, bindConfirmationEscape } from './confirm-button';
 import { createHelpAbout } from './help-about';
 import { contentTypes, typeLabels, type ContentType } from '../model/library';
 
@@ -22,6 +23,7 @@ export class LibraryShell {
 
   constructor(private readonly document: Document) {
     this.element = document.createElement('section');
+    bindConfirmationEscape(this.element);
     this.element.id = libraryRegionId;
     this.element.className = 'ctrlem-db-library ctrlem-db-ui';
     this.element.hidden = true;
@@ -79,6 +81,7 @@ export class LibraryShell {
   }
 
   private select(section: Section): void {
+    if (this.section !== section) cancelConfirmations(this.element);
     this.section = section;
     this.content.hidden = section === 'settings' || section === 'help';
     this.settings.hidden = section !== 'settings'; this.help.hidden = section !== 'help'; this.back.hidden = true;
@@ -98,7 +101,7 @@ export class LibraryShell {
   }
   showCategories(): void { this.select(this.activeType); }
   showSettings(back: () => void): void { this.select('settings'); this.back.hidden = false; this.back.onclick = back; }
-  setOpen(open: boolean): void { this.element.hidden = !open; }
+  setOpen(open: boolean): void { if (!open) cancelConfirmations(this.element); this.element.hidden = !open; }
   focus(): void { this.heading.focus({ preventScroll: true }); }
   dispose(): void { this.document.defaultView!.removeEventListener('message', this.receiveHeight); }
 }

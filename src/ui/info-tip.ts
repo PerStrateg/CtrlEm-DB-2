@@ -25,7 +25,7 @@ export function mountInfoTips(document: Document): () => void {
   let suppressed: HTMLButtonElement | undefined;
   let timer: number | undefined;
   const buttonAt = (target: EventTarget | null) => target instanceof window.Element
-    ? target.closest<HTMLButtonElement>('button.ctrlem-db-info') : null;
+    ? target.closest<HTMLButtonElement>('button[data-info]') : null;
   const close = () => {
     window.clearTimeout(timer);
     observer.disconnect();
@@ -36,6 +36,7 @@ export function mountInfoTips(document: Document): () => void {
   const position = () => {
     if (!active) return;
     if (!active.isConnected || !active.getClientRects().length) { close(); return; }
+    if (!active.hasAttribute('data-info')) { close(); return; }
     const copy = active.dataset.info ?? '';
     if (tip.textContent !== copy) tip.textContent = copy;
     const anchor = active.getBoundingClientRect();
@@ -80,12 +81,14 @@ export function mountInfoTips(document: Document): () => void {
   const blur = () => { suppressed = undefined; leave(); };
   const click = (event: MouseEvent) => {
     const button = buttonAt(event.target);
-    if (button) {
+    if (button?.classList.contains('ctrlem-db-info')) {
       if (active === button && pinned) { close(); suppressed = button; }
       else { suppressed = undefined; open(button); pinned = true; }
-    } else if (!tip.contains(event.target as Node)) close();
+    } else if (button) { suppressed = undefined; open(button); }
+    else if (!tip.contains(event.target as Node)) close();
   };
   const key = (event: KeyboardEvent) => {
+    if (event.key === 'Escape' && active?.closest('[data-confirming]')) { close(); return; }
     if (event.key === 'Escape' && active) { suppressed = active; close(); event.preventDefault(); event.stopPropagation(); }
   };
   document.addEventListener('pointerover', over);

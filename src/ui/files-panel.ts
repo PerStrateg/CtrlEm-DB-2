@@ -1,3 +1,4 @@
+import { ConfirmButton } from './confirm-button';
 import { filesAccept } from '../model/files';
 import type { FilesSnapshot } from '../model/files';
 import { FilesGrid } from './files-grid';
@@ -22,7 +23,7 @@ export class FilesPanel {
   private readonly auto: HTMLButtonElement;
   private readonly previews: HTMLInputElement;
   private readonly interval: HTMLInputElement;
-  private readonly confirmation: HTMLElement;
+  private readonly confirmation: ConfirmButton;
   private readonly importButtons: HTMLButtonElement[] = [];
   private readingDrop = false;
   private importing = false;
@@ -46,7 +47,11 @@ export class FilesPanel {
       input.addEventListener('change', () => { void actions.add(pickedFiles(input.files ?? [])); input.value = ''; });
       const add = button(directory ? 'Add folder' : 'Add files', () => input.click()); this.importButtons.push(add); bar.append(add, input);
     }
-    const clear = button('Clear all', () => { this.confirmation.hidden = !this.confirmation.hidden; });
+    const clear = doc.createElement('button'); clear.type = 'button'; clear.textContent = 'Clear all';
+    this.confirmation = new ConfirmButton(clear, {
+      request: () => this.confirmation.arm('Clear local files and cancel Local Upload tasks? CtrlEm uploads will remain.'),
+      confirm: () => { this.confirmation.reset(); this.cancelDrop(); actions.clear(); },
+    });
     this.previews = doc.createElement('input'); this.previews.type = 'checkbox';
     this.previews.addEventListener('change', () => actions.previews(this.previews.checked));
     this.previews.setAttribute('aria-label', 'Previews'); this.previews.title = 'Previews';
@@ -58,14 +63,8 @@ export class FilesPanel {
     this.auto = button('A', actions.auto); this.auto.className = 'ctrlem-db-auto-toggle';
     this.count = doc.createElement('span'); this.count.className = 'ctrlem-db-files-count';
     const seconds = doc.createElement('label'); seconds.append(this.interval, 'sec');
-    bar.append(clear, this.count, button('Close', actions.close));
+    bar.append(this.confirmation.element, this.count, button('Close', actions.close));
     sendBar.append(this.send, seconds, this.auto, previewLabel);
-    this.confirmation = doc.createElement('div'); this.confirmation.className = 'ctrlem-db-files-confirm'; this.confirmation.hidden = true;
-    const confirmationText = doc.createElement('p'); confirmationText.textContent = 'Clear local files and cancel Local Upload tasks? CtrlEm uploads will remain.';
-    const confirmationActions = doc.createElement('div'); confirmationActions.className = 'ctrlem-db-actions';
-    confirmationActions.append(
-      button('Clear files', () => { this.confirmation.hidden = true; this.cancelDrop(); actions.clear(); }), button('Cancel', () => { this.confirmation.hidden = true; clear.focus(); }));
-    this.confirmation.append(confirmationText, confirmationActions);
     this.status = doc.createElement('p'); this.status.className = 'ctrlem-db-files-status'; this.status.setAttribute('role', 'status'); this.status.hidden = true;
     this.empty = doc.createElement('div'); this.empty.className = 'ctrlem-db-files-empty';
     const dropHint = doc.createElement('p');
@@ -79,7 +78,7 @@ export class FilesPanel {
     this.grid = new FilesGrid(doc, actions.select, actions.remove);
     this.dropzone = doc.createElement('div'); this.dropzone.className = 'ctrlem-db-files-dropzone';
     this.dropzone.append(this.empty, this.grid.element, dropHint);
-    this.element.append(bar, this.confirmation, sendBar, this.dropzone, this.status);
+    this.element.append(bar, sendBar, this.dropzone, this.status);
     let dragDepth = 0;
     const clearDrag = () => { dragDepth = 0; this.dropzone.classList.remove('ctrlem-db-files-drag-active'); };
     this.dropzone.addEventListener('dragenter', event => {
@@ -111,7 +110,7 @@ export class FilesPanel {
         if (generation === this.dropGeneration) { this.readingDrop = false; this.updateImportButtons(); }
       });
     });
-    this.element.addEventListener('keydown', event => { if (event.key === 'Escape') { event.stopPropagation(); actions.close(); } });
+    this.element.addEventListener('keydown', event => { if (event.key === 'Escape') { event.stopPropagation(); if (this.confirmation.armed) this.confirmation.cancel(true); else actions.close(); } });
   }
   message(value: string): void { this.status.textContent = value; this.status.hidden = !value; }
   private cancelDrop(): void { this.dropGeneration++; this.readingDrop = false; this.updateImportButtons(); }
@@ -129,7 +128,7 @@ export class FilesPanel {
     this.auto.setAttribute('aria-label', this.auto.title); this.auto.setAttribute('aria-pressed', String(Boolean(task)));
     this.auto.disabled = !task && !state.items.length; this.send.disabled = !state.selected || !state.items.some(item => item.id === state.selected);
     this.importing = importing; this.updateImportButtons();
-    if (!open) this.dropzone.classList.remove('ctrlem-db-files-drag-active');
+    if (!open) { this.dropzone.classList.remove('ctrlem-db-files-drag-active'); this.confirmation.reset(); }
     this.grid.render(state.items, state.selected, state.previews && !this.element.ownerDocument.hidden, open);
     if (focusEmpty) this.importButtons[0]!.focus({ preventScroll: true });
   }
