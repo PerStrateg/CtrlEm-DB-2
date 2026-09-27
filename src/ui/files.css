@@ -15,8 +15,10 @@
 .ctrlem-db-files-status { flex-shrink: 0; padding: 6px 0; }
 .ctrlem-db-files-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; flex: 1; min-height: 0; overflow: auto; padding: 16px; text-align: center; color: var(--text-secondary); font-size: .8rem; line-height: 1.4; }
 .ctrlem-db-files-empty p { flex-shrink: 0; margin: 0; }
+.ctrlem-db-files-drop-hint { flex-shrink: 0; margin: 8px 16px 12px; text-align: center; color: var(--text-secondary); font-size: .8rem; line-height: 1.4; transition: opacity .18s ease; }
+.ctrlem-db-files-has-items .ctrlem-db-files-drop-hint { opacity: .28; }
 .ctrlem-db-files-illustration { display: block; flex: 1; width: min(100%, 320px); height: 0; min-height: 0; max-height: 300px; object-fit: contain; opacity: .55; }
-.ctrlem-db-files-empty:not([hidden]) + .ctrlem-db-files-grid { display: none; }
+.ctrlem-db-files-empty:not([hidden]) ~ .ctrlem-db-files-grid { display: none; }
 .ctrlem-db-files [hidden] { display: none !important; }
 .ctrlem-db-files-grid { overflow: auto; flex: 1; min-height: 0; padding: 8px; }
 .ctrlem-db-files-canvas { position: relative; }

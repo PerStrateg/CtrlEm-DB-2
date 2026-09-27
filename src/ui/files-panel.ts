@@ -69,15 +69,16 @@ export class FilesPanel {
     this.status = doc.createElement('p'); this.status.className = 'ctrlem-db-files-status'; this.status.setAttribute('role', 'status'); this.status.hidden = true;
     this.empty = doc.createElement('div'); this.empty.className = 'ctrlem-db-files-empty';
     const dropHint = doc.createElement('p');
+    dropHint.className = 'ctrlem-db-files-drop-hint';
     dropHint.textContent = 'Drag & drop images or folders here, or use Add files / Add folder.';
     const formats = doc.createElement('p'); formats.textContent = 'JPG, PNG, GIF, WebP. Large files resize automatically.';
     formats.append(doc.createElement('br'), 'Files here aren’t saved to the library due to CtrlEm limitations.');
     const illustration = doc.createElement('img'); illustration.className = 'ctrlem-db-files-illustration';
     illustration.src = localUploadIllustration; illustration.alt = 'CtrlEm keeps up to 20 uploaded files for sending.'; illustration.draggable = false;
-    this.empty.append(dropHint, formats, illustration);
+    this.empty.append(formats, illustration);
     this.grid = new FilesGrid(doc, actions.select, actions.remove);
     this.dropzone = doc.createElement('div'); this.dropzone.className = 'ctrlem-db-files-dropzone';
-    this.dropzone.append(this.empty, this.grid.element);
+    this.dropzone.append(this.empty, this.grid.element, dropHint);
     this.element.append(bar, this.confirmation, sendBar, this.dropzone, this.status);
     let dragDepth = 0;
     const clearDrag = () => { dragDepth = 0; this.dropzone.classList.remove('ctrlem-db-files-drag-active'); };
@@ -119,6 +120,7 @@ export class FilesPanel {
     const focusEmpty = open && !state.items.length && this.grid.element.contains(this.element.ownerDocument.activeElement);
     this.button.setAttribute('aria-expanded', String(open)); this.button.setAttribute('aria-label', open ? 'Close Local Upload' : 'Open Local Upload');
     this.count.textContent = `${state.items.length} files`;
+    this.dropzone.classList.toggle('ctrlem-db-files-has-items', state.items.length > 0);
     this.empty.hidden = state.items.length > 0;
     this.previews.checked = state.previews;
     if (this.interval !== this.interval.ownerDocument.activeElement) this.interval.value = String(state.interval);
