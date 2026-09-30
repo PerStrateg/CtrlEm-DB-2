@@ -2,7 +2,7 @@ import { filesPolicy } from '../model/files';
 import type { FilePart, FileProgress, FilesGallery, FilesSnapshot, FilesProgressSnapshot } from '../model/files';
 import type { FileProcess } from '../shared/files-protocol';
 import { FilesRepository } from '../storage/files-store';
-import { NativeUploads } from '../site/native-uploads';
+import { CtrlemUploadsAdapter } from '../uploads/adapters/ctrlem-uploads';
 import { WriteQueue } from '../storage/library-store';
 import { reportTabDiagnostic } from '../diagnostics/relay';
 import { classifyDiagnosticError, diagnosticMime } from '../diagnostics/session-log';
@@ -17,7 +17,7 @@ export class FilesService implements FilesSource {
   readonly repository = new FilesRepository();
   readonly writes = new WriteQueue();
   private readonly uploadsQueue = new WriteQueue();
-  private readonly native = new NativeUploads();
+  private readonly native = new CtrlemUploadsAdapter();
   private readonly jobs = new Map<string, { tabId: number; id: string; part: FilePart; generation: string; abort: AbortController }>();
   private readonly progress = new Map<string, { token: string; value: FileProgress }>();
   private progressRevision = Date.now();

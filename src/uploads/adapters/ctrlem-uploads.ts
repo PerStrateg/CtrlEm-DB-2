@@ -1,11 +1,11 @@
-import type { NativeUpload } from '../model/files';
-import { z } from '../shared/validation';
+import type { NativeUpload } from '../../model/files';
+import { z } from '../../shared/validation';
 
 const upload = z.object({ id: z.string().uuid(), originalName: z.string(), mimeType: z.string(), fileSize: z.number(),
   createdAt: z.string().datetime(), url: z.string().startsWith('/api/uploads/') });
 
-/** The same authenticated endpoints used by CtrlEm's native image picker. */
-export class NativeUploads {
+/** Authenticated adapter for the upload endpoints shared with CtrlEm's native picker. */
+export class CtrlemUploadsAdapter {
   constructor(private readonly request: typeof fetch = globalThis.fetch.bind(globalThis)) {}
   private async call(path: string, init?: RequestInit): Promise<Response> {
     const response = await this.request(`https://ctrlem.com${path}`, { credentials: 'include', cache: 'no-store', ...init });

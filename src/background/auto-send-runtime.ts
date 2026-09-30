@@ -9,7 +9,7 @@ import { authorizedTab } from './library-service';
 import { WriteQueue } from '../storage/library-store';
 import type { FilesSource } from './files-service';
 import { CtrlemCommandApiAdapter, reportCommandApi } from '../commands/adapters/ctrlem-command-api';
-import { NativeUploads } from '../site/native-uploads';
+import { CtrlemUploadsAdapter } from '../uploads/adapters/ctrlem-uploads';
 
 const alarmName = 'ctrlem.auto-send.wake';
 const recipient = receiverFromUrl;
@@ -35,7 +35,7 @@ export function registerAutoSend(queue: WriteQueue, files?: FilesSource): AutoSe
   };
   const failed = () => { clearTimeout(timer); broadcast(undefined); };
   const commandApi = new CtrlemCommandApiAdapter(fetch, reportCommandApi);
-  const uploads = new NativeUploads();
+  const uploads = new CtrlemUploadsAdapter();
   const scheduler = new AutoSendService(new AutoSendRepository(chrome.storage.session), new LibraryRepository(chrome.storage.local), {
     probe,
     pages: async () => (await Promise.all((await tabs()).map(async tab => {
