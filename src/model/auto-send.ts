@@ -40,7 +40,7 @@ export interface AutoTask {
   preparation?: { token: string; itemId: string };
   preparedItemId?: string;
   fileError?: string;
-  id: string; receiver: string; command: AutoCommandKey; tabId: number;
+  id: string; receiver: string; command: AutoCommandKey; tabId?: number;
   categoryId?: string; categoryName: string; intervalSeconds: number;
   status: 'queued' | 'running' | 'stopping' | 'paused'; reason?: PauseReason;
   dueAt: number; orderIds: string[]; nextItemId?: string;
@@ -57,7 +57,7 @@ export interface ManualSend {
   preparation?: { token: string; itemId: string };
   preparedItemId?: string;
   fileError?: string;
-  id: string; receiver: string; tabId?: number; delivery: 'page' | 'api'; parameters: SendCommand;
+  id: string; receiver: string; tabId?: number; parameters: SendCommand;
   status: AutoTask['status']; reason?: PauseReason; dueAt: number; sequence: number;
   retryCount: number; execution?: AutoExecution;
   readinessAt?: number;
@@ -73,7 +73,6 @@ export const emptyAutoState = (): AutoState => ({ revision: 0, nextAllowedAt: 0,
 
 export type QueueEntry = AutoTask | ManualSend;
 export const isManualSend = (entry: QueueEntry): entry is ManualSend => 'sequence' in entry;
-export const isApiSend = (entry: QueueEntry): entry is ManualSend => isManualSend(entry) && entry.delivery === 'api';
 export const queueAvailableAt = (entry: QueueEntry, state: Pick<AutoState, 'nextAllowedAt' | 'groupAllowedAt'>): number => Math.max(entry.dueAt,
   entry.readinessAt ?? 0, state.nextAllowedAt, entry.receiver.startsWith('group:') ? state.groupAllowedAt : 0);
 export function orderedQueue(state: Pick<AutoState, 'tasks' | 'sends' | 'nextAllowedAt' | 'groupAllowedAt'>, now: number): QueueEntry[] {

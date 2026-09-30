@@ -1,6 +1,6 @@
 import { sendQueueLimits } from '../model/send-command';
 import { commands } from '../model/commands';
-import { autoSendLimits, emptyAutoState, nextAutoItem, isApiSend, isManualSend as manual, orderedQueue, queueAvailableAt } from '../model/auto-send';
+import { autoSendLimits, emptyAutoState, nextAutoItem, isManualSend as manual, orderedQueue, queueAvailableAt } from '../model/auto-send';
 import type { AutoExecution, AutoOutcome, AutoState, AutoTask, QueueEntry, PauseReason } from '../model/auto-send';
 import { AutoSendRepository } from '../storage/auto-send-store';
 import { LibraryRepository, WriteQueue } from '../storage/library-store';
@@ -10,13 +10,12 @@ import type { FilesSource } from './files-service';
 export interface AutoTransport {
   probe(tabId: number): Promise<AutoPageState | undefined>;
   pages(): Promise<{ tabId: number; page: AutoPageState }[]>;
-  execute(tabId: number, execution: AutoExecution): Promise<AutoOutcome>;
-  executeApi(execution: AutoExecution): Promise<AutoOutcome>;
+  execute(execution: AutoExecution): Promise<AutoOutcome>;
   open(receiver: string): Promise<void>;
   changed(snapshot: AutoSnapshot | undefined): void;
   wakeAt(time: number | undefined): void;
 }
-const command = (entry: QueueEntry): string => manual(entry) ? entry.parameters.key : entry.command;
+export interface DefaultImageSource { items(): Promise<{ id: string; value: string; label?: string }[]> }
 export class AutoSendError extends Error {}
 
 /** One serialized owner. Persist the execution token before any native side effect. */
@@ -30,7 +29,8 @@ export class AutoSendService {
   private readyReceivers: string[] = [];
   constructor(private readonly repository: AutoSendRepository, private readonly library: LibraryRepository,
     private readonly transport: AutoTransport, private readonly now = Date.now,
-    private readonly queue = new WriteQueue(), private readonly files?: FilesSource) {}
+    private readonly queue = new WriteQueue(), private readonly files?: FilesSource,
+    private readonly defaultImages?: DefaultImageSource) {}
 
   /** Called under the shared library/dispatch queue; never enqueue recursively. */
   async libraryChanged(): Promise<void> {
@@ -119,12 +119,11 @@ export class AutoSendService {
   private entries(state = this.state): QueueEntry[] { return [...state.sends, ...state.tasks]; }
   private availableAt(entry: QueueEntry, state = this.state): number { return queueAvailableAt(entry, state); }
   private ordered(state = this.state): QueueEntry[] { return orderedQueue(state, this.now()).filter(entry => entry.status === 'queued' && !entry.preparation); }
-  private acceptManual(state: AutoState, receiver: string, request: Extract<AutoRequest, { type: 'auto:enqueue' }>,
-    delivery: 'page' | 'api', tabId?: number): void {
+  private acceptManual(state: AutoState, receiver: string, request: Extract<AutoRequest, { type: 'auto:enqueue' }>, tabId?: number): void {
     if (state.sends.some(send => send.id === request.id) || state.acceptedRequests.some(entry => entry.id === request.id && entry.expiresAt > this.now())) return;
     const expiresAt = request.createdAt + sendQueueLimits.requestWindowMs;
     if (expiresAt <= this.now() || request.createdAt > this.now()) throw new AutoSendError('Send request expired. Click Send again if needed.');
-    state.sends.push({ id: request.id, receiver, tabId, delivery, parameters: request.parameters, status: 'queued',
+    state.sends.push({ id: request.id, receiver, tabId: request.source === 'files' ? tabId : undefined, parameters: request.parameters, status: 'queued',
       dueAt: this.now(), sequence: ++state.sequence, retryCount: 0, source: request.source, fileId: request.fileId });
     state.acceptedRequests.push({ id: request.id, expiresAt });
   }
@@ -153,10 +152,10 @@ export class AutoSendService {
     task.retryCount = 0; delete task.execution; delete task.retryExecution; delete task.reason; delete task.failureCode;
     delete task.preparedItemId;
   }
-  private async items(task: AutoTask, page: AutoPageState): Promise<{ id: string; value?: string }[]> {
+  private async items(task: AutoTask): Promise<{ id: string; value?: string }[]> {
     if (task.source === 'files') return this.files!.items();
     if (task.command === 'sendOrDelete') return [];
-    if (task.categoryId === 'default') return page.galleries[task.command] ?? [];
+    if (task.categoryId === 'default') return this.defaultImages?.items() ?? [];
     const type = commands[task.command].type;
     const category = (await this.library.read()).categories.find(category => category.id === task.categoryId && category.type === type);
     if (category) task.categoryName = category.name;
@@ -174,17 +173,12 @@ export class AutoSendService {
       await this.libraryChanged();
       const state = structuredClone(this.state);
       switch (request.type) {
-        case 'auto:claim': return this.snapshot();
-        case 'auto:ready': {
-          for (const entry of this.entries(state)) if (entry.tabId === tabId && entry.status === 'queued' && entry.reason === 'busy') { delete entry.readinessAt; delete entry.reason; }
-          break;
-        }
         case 'auto:dismiss': state.notices = state.notices.filter(notice => notice.id !== request.id); break;
         case 'auto:enqueue': {
           if (request.source === 'files' && (request.parameters.key !== 'popupImage' || !request.fileId || !(await this.files!.items()).some(item => item.id === request.fileId))) throw new AutoSendError('Choose an available file.');
           const page = await this.transport.probe(tabId);
-          if (!page || page.receiver !== receiver || !page.nativeCommands.includes(request.parameters.key)) throw new AutoSendError('Command is unavailable on this page.');
-          this.acceptManual(state, receiver, request, 'page', tabId); break;
+          if (!page || page.receiver !== receiver || !page.commands.some(command => command === request.parameters.key)) throw new AutoSendError('Command is unavailable on this page.');
+          this.acceptManual(state, receiver, request, tabId); break;
         }
         case 'auto:snapshot': {
           this.readyReceivers = [...new Set((await this.transport.pages()).map(({ page }) => page.receiver))];
@@ -197,10 +191,10 @@ export class AutoSendService {
           if (state.tasks.some(task => task.receiver === receiver && task.command === request.command && task.source === request.source)) return this.snapshot();
           const page = await this.transport.probe(tabId);
           if (!page || page.receiver !== receiver || !page.commands.includes(request.command)) throw new AutoSendError('Open the command on the recipient’s page.');
-          const task: AutoTask = { id: crypto.randomUUID(), receiver, command: request.command, tabId,
+          const task: AutoTask = { id: crypto.randomUUID(), receiver, command: request.command, tabId: request.source === 'files' ? tabId : undefined,
             source: request.source, parameters: request.parameters, categoryId: request.categoryId, categoryName: request.source === 'files' ? 'Local Upload' : request.categoryId === 'default' ? 'Default' : '',
             intervalSeconds: request.intervalSeconds, status: 'queued', dueAt: this.now(), orderIds: [], nextItemId: request.itemId, selectionRevision: 0 };
-          const items = await this.items(task, page);
+          const items = await this.items(task);
           if (task.command !== 'sendOrDelete' && !items.length) throw new AutoSendError('Choose a non-empty category.');
           task.orderIds = items.map(item => item.id);
           task.nextItemId = nextAutoItem(task, items)?.id;
@@ -212,9 +206,7 @@ export class AutoSendService {
           if (!task || task.receiver !== receiver || task.source !== request.source || task.categoryId !== request.categoryId || task.command === 'sendOrDelete' || task.status === 'stopping') {
             throw new AutoSendError('This selection does not belong to an available task.');
           }
-          const page = await this.transport.probe(tabId);
-          if (!page || page.receiver !== receiver) throw new AutoSendError('Open the recipient’s page to change the selection.');
-          const items = await this.items(task, page);
+          const items = await this.items(task);
           if (!items.some(item => item.id === request.itemId)) throw new AutoSendError('The selected item is no longer available. Choose another item.');
           task.nextItemId = task.highlightedItemId = request.itemId;
           task.orderIds = items.map(item => item.id); task.selectionRevision++; delete task.retryExecution;
@@ -238,14 +230,14 @@ export class AutoSendService {
           const task = this.entries(state).find(task => task.id === request.id);
           if (!task || task.status !== 'paused') return this.snapshot();
           if (task.reason === 'invalid') throw new AutoSendError('Cancel or stop this task, correct the command, then send again.');
-          if (isApiSend(task)) {
+          if (task.source !== 'files') {
             task.status = 'queued'; task.retryCount = 0; delete task.reason; delete task.failureCode; task.dueAt = this.now(); break;
           }
           const pages = await this.transport.pages();
-          const candidates = pages.filter(({ page }) => page.receiver === task.receiver && page.nativeCommands.includes(command(task)));
+          const candidates = pages.filter(({ page }) => page.receiver === task.receiver && page.commands.some(command => command === (manual(task) ? task.parameters.key : task.command)));
           const candidate = candidates.find(page => page.tabId === tabId) ?? candidates.find(page => page.tabId === task.tabId) ?? candidates[0];
           if (!candidate) throw new AutoSendError('Open the recipient’s page before resuming.');
-          const items = manual(task) || task.retryExecution ? [] : await this.items(task, candidate.page);
+          const items = manual(task) || task.retryExecution ? [] : await this.items(task);
           if (!manual(task) && !task.retryExecution && task.command !== 'sendOrDelete' && !items.length) throw new AutoSendError('Choose a non-empty category. Stop this task to change its source.');
           task.tabId = candidate.tabId; task.status = 'queued'; task.retryCount = 0; delete task.reason; delete task.failureCode; delete task.fileError; task.dueAt = this.now(); break;
         }
@@ -260,18 +252,18 @@ export class AutoSendService {
       await this.commit(state); return this.snapshot();
     });
   }
-  enqueueApi(receiver: string, request: Extract<AutoRequest, { type: 'auto:enqueue' }>): Promise<AutoSnapshot> {
+  enqueue(receiver: string, request: Extract<AutoRequest, { type: 'auto:enqueue' }>): Promise<AutoSnapshot> {
     return this.queue.run(async () => {
       await this.load();
       if (this.fault) throw new AutoSendError('Couldn’t save task state. Retry the connection.');
       const state = structuredClone(this.state);
-      this.acceptManual(state, receiver, request, 'api');
+      this.acceptManual(state, receiver, request);
       await this.commit(state);
       return this.snapshot();
     });
   }
   private detach(state: AutoState, tabId: number): void {
-    for (const entry of this.entries(state).filter(entry => entry.tabId === tabId)) {
+    for (const entry of this.entries(state).filter(entry => entry.source === 'files' && entry.tabId === tabId)) {
       delete entry.preparation;
       if (entry.execution) {
         this.notice(state, entry);
@@ -285,7 +277,7 @@ export class AutoSendService {
   removeTab(tabId: number): Promise<void> {
     return this.queue.run(async () => {
       await this.load();
-      if (!this.entries().some(task => task.tabId === tabId)) return;
+      if (!this.entries().some(task => task.source === 'files' && task.tabId === tabId)) return;
       const state = structuredClone(this.state); this.detach(state, tabId);
       await this.commit(state);
     });
@@ -383,15 +375,10 @@ export class AutoSendService {
     });
     if (!candidate) return;
     // Keep Stop and manual Send responsive while asking a potentially slow tab.
-    let items: { id: string; value?: string }[] = [], reason: PauseReason | undefined, page: AutoPageState | undefined;
+    let items: { id: string; value?: string }[] = [], reason: PauseReason | undefined;
     let fileValue: string | undefined, fileError: string | undefined;
     try {
-      if (!isApiSend(candidate)) {
-        page = await this.transport.probe(candidate.tabId!);
-        if (!page || page.receiver !== candidate.receiver || !page.nativeCommands.includes(command(candidate))) reason = 'unavailable';
-        else if (!page.readyCommands.includes(command(candidate))) reason = 'busy';
-      }
-      if (!reason && candidate.source === 'files') {
+      if (candidate.source === 'files') {
         const abort = new AbortController();
         const allowed = await this.queue.run(async () => {
           const current = this.entries().find(entry => entry.id === candidate.id);
@@ -409,7 +396,7 @@ export class AutoSendService {
       if (this.fault) return;
       await this.libraryChanged();
       const state = structuredClone(this.state), task = this.entries(state).find(task => task.id === candidate.id);
-      if (!task || task.status !== 'queued' || task.tabId !== candidate.tabId ||
+      if (!task || task.status !== 'queued' ||
         this.availableAt(task, state) > this.now()) { this.schedule(); return; }
       // A choice made during preparation needs a fresh view of its source.
       if (!manual(task) && !manual(candidate) && task.selectionRevision !== candidate.selectionRevision) { this.schedule(); return; }
@@ -429,7 +416,7 @@ export class AutoSendService {
         await this.dispatch(state, task); return;
       }
       // Re-read after the probe while library writes and dispatch share the same queue.
-      items = await this.items(task, page!);
+      items = await this.items(task);
       if (task.retryExecution && task.command !== 'sendOrDelete' && !items.some(item => item.id === task.retryExecution!.itemId)) {
         delete task.retryExecution; task.retryCount = 0; delete task.failureCode;
       }
@@ -454,7 +441,7 @@ export class AutoSendService {
   private async dispatch(state: AutoState, task: QueueEntry): Promise<void> {
     await this.commit(state);
     const token = task.execution!.token;
-    const execution = isApiSend(task) ? this.transport.executeApi(task.execution!) : this.transport.execute(task.tabId!, task.execution!);
+    const execution = this.transport.execute(task.execution!);
     void execution.then(
       outcome => this.result(token, outcome),
       () => this.result(token, { status: 'paused', reason: 'unknown' }),

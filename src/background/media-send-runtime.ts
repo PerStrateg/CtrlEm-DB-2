@@ -15,8 +15,8 @@ export function registerMediaSend(scheduler: AutoSendService): void {
     const key = mediaCommandByAction[parsed.data.action];
     const parameters = { key, label: commands[key].label,
       fields: [{ id: commands[key].fieldId, value: parsed.data.resource.url }] };
-    console.info('[CtrlEm DB][media-api]', { event: 'enqueue', receiverKind: 'group', command: key });
-    void scheduler.enqueueApi(mediaDestination.receiver, {
+    console.info('[CtrlEm DB][command-queue]', { event: 'enqueue', receiverKind: 'group', command: key });
+    void scheduler.enqueue(mediaDestination.receiver, {
       type: 'auto:enqueue', id: crypto.randomUUID(), createdAt: Date.now(), parameters,
     }).then(() => respond({ ok: true }), error => respond({ ok: false,
       error: error instanceof Error ? error.message : 'Couldn’t send to CtrlEm.' }));

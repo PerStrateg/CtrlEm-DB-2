@@ -24,8 +24,6 @@ export const autoRequestSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('auto:manual') }).strict(),
   z.object({ type: z.literal('auto:enqueue'), id: z.string().uuid(), createdAt: z.number().int().nonnegative(), parameters: sendCommandSchema,
     source: z.literal('files').optional(), fileId: z.string().optional() }).strict(),
-  z.object({ type: z.literal('auto:ready') }).strict(),
-  z.object({ type: z.literal('auto:claim'), token: z.string().uuid() }).strict(),
   z.object({ type: z.literal('auto:dismiss'), id: z.string().uuid() }).strict(),
   z.object({ type: z.literal('auto:detach') }).strict(),
 ]);
@@ -33,7 +31,6 @@ export type AutoRequest = z.infer<typeof autoRequestSchema>;
 export class AutoConnectionError extends Error {}
 export interface AutoPageState {
   receiver: string; commands: AutoCommandKey[]; galleries: Partial<Record<AutoCommandKey, Item[]>>;
-  nativeCommands: string[]; readyCommands: string[];
 }
 export interface AutoSnapshot extends Omit<AutoState, 'acceptedRequests'> { readyReceivers: string[] }
 export interface AutoClient {

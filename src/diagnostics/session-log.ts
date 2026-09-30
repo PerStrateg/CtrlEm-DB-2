@@ -2,8 +2,8 @@ import { z } from '../shared/validation';
 import { commandKeys } from '../model/commands';
 
 export const diagnosticLimits = { maxBytes: 5 * 1024 * 1024, maxEntries: 8192, headerBytes: 4096 };
-const events = ['session.start', 'session.end', 'upload', 'library', 'auto.request', 'auto.execute',
-  'files.import', 'files.prepare', 'files.operation', 'command.api', 'native.send', 'site.error', 'log.export'] as const;
+const events = ['session.start', 'session.end', 'upload', 'library', 'auto.request',
+  'files.import', 'files.prepare', 'files.operation', 'command.api', 'site.error', 'log.export'] as const;
 const commands = [...commandKeys, 'sendOrDelete', 'session', 'other'] as const;
 const mimes = ['image/gif', 'image/png', 'image/jpeg', 'image/webp', 'image/avif', 'image/bmp', 'video/mp4', 'audio/mpeg', 'other'] as const;
 const codes = ['unknown', 'network', 'http', 'invalid-response', 'interrupted', 'file-read', 'unavailable',
@@ -29,7 +29,7 @@ const detailsSchema = z.object({
   failureCode: z.enum(['rateLimit', 'required', 'url', 'textLength', 'count', 'session', 'rejected']).optional(),
   request: z.enum(['library:load', 'library:change', 'library:capture', 'library:import', 'library:add-upload', 'library:session',
     'picker:load', 'picker:select', 'auto:snapshot', 'auto:start', 'auto:stop', 'auto:seek', 'auto:stop-all', 'auto:resume',
-    'auto:open', 'auto:manual', 'auto:enqueue', 'auto:ready', 'auto:claim', 'auto:dismiss', 'auto:detach',
+    'auto:open', 'auto:manual', 'auto:enqueue', 'auto:dismiss', 'auto:detach',
     'files:list', 'files:gallery', 'files:progress', 'files:clear', 'files:remove', 'files:preferences']).optional(),
   observation: z.enum(['observed', 'not-observed', 'unavailable', 'ambiguous']).optional(),
   hostPermission: z.enum(['granted', 'missing', 'unknown']).optional(),

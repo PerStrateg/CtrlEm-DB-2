@@ -1,4 +1,5 @@
 import type { SendCommand, SendField } from '../model/send-command';
+import { autoCommandKeys } from '../model/auto-send';
 
 type Field = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 interface Replacement { native: HTMLButtonElement; proxy: HTMLButtonElement; hidden: boolean }
@@ -7,8 +8,6 @@ const specialButtons: Record<string, string> = { lovense: 'btn-lovense-send', op
 /** Owns the site's Send controls and drafts; never changes native cooldown or calls an API. */
 export class NativeSend {
   private readonly replacements = new Map<string, Replacement>();
-  private readonly drafts = new Map<Field, SendField>();
-  private applying = false;
   private onSend?: (command: SendCommand) => void;
   private stopObservation?: () => void;
   constructor(private readonly document: Document) {}
@@ -25,10 +24,6 @@ export class NativeSend {
   }
   button(key: string): HTMLButtonElement | undefined { return this.buttons().get(key); }
   visible(key: string): HTMLButtonElement | undefined { return this.replacements.get(key)?.proxy ?? this.button(key); }
-  ready(key: string): boolean {
-    const button = this.button(key);
-    return Boolean(button?.isConnected && !button.disabled && button.getAttribute('aria-disabled') !== 'true');
-  }
   private panel(key: string): HTMLElement | null {
     return this.button(key)?.closest<HTMLElement>('.cmd-panel') ?? this.document.getElementById(`acc-${key.replace('plugin:', 'plugin-')}`);
   }
@@ -40,10 +35,6 @@ export class NativeSend {
   private fieldId(field: Field, index: number): string { return field.id || `field:${index}`; }
   private read(field: Field, id: string): SendField {
     return { id, value: field.value, ...('checked' in field ? { checked: field.checked } : {}) };
-  }
-  private write(field: Field, value: SendField): void {
-    field.value = value.value;
-    if ('checked' in field && value.checked !== undefined) field.checked = value.checked;
   }
   capture(key: string, validate = true): SendCommand {
     const button = this.button(key);
@@ -59,77 +50,19 @@ export class NativeSend {
       mode: this.panel(key)?.querySelector<HTMLElement>('.pishock-op.active, .openshock-op.active')?.dataset.op ??
         this.panel(key)?.querySelector<HTMLElement>('.openshock-op.active')?.dataset.type };
   }
-  /** Parameter writes are synchronous: native handlers read them before awaiting the site. */
-  click(command: SendCommand, override?: { id: string; value: string }): void {
-    const button = this.button(command.key);
-    const fields = this.fields(command.key);
-    if (!button || command.fields.some(saved => !fields.some((field, i) => this.fieldId(field, i) === saved.id))) {
-      throw new Error('Command fields changed. Reopen its page.');
-    }
-    this.rememberDrafts();
-    const device = this.document.getElementById('target-device-select') as HTMLSelectElement | null;
-    const layout = this.document.getElementById('commands-layout');
-    const oldDevice = device?.value, oldLayout = layout?.dataset.activeDevice;
-    const modes = Array.from(this.panel(command.key)?.querySelectorAll<HTMLElement>('.pishock-op, .openshock-op') ?? []);
-    const activeModes = modes.filter(mode => mode.classList.contains('active'));
-    this.applying = true;
-    try {
-      for (const saved of command.fields) {
-        const field = fields.find((field, i) => this.fieldId(field, i) === saved.id)!;
-        this.write(field, override?.id === saved.id ? { ...saved, value: override.value } : saved);
-      }
-      if (override && !command.fields.some(field => field.id === override.id)) {
-        const field = fields.find(field => field.id === override.id);
-        if (field) field.value = override.value;
-      }
-      if (device && command.device !== undefined) device.value = command.device;
-      if (layout && command.device !== undefined) layout.dataset.activeDevice = command.device;
-      if (command.mode !== undefined) for (const mode of modes) mode.classList.toggle('active', (mode.dataset.op ?? mode.dataset.type) === command.mode);
-      const Event = this.document.defaultView!.Event;
-      for (const field of fields) { field.dispatchEvent(new Event('input', { bubbles: true })); field.dispatchEvent(new Event('change', { bubbles: true })); }
-      button.click();
-    } finally {
-      if (device && oldDevice !== undefined) device.value = oldDevice;
-      if (layout) { if (oldLayout === undefined) delete layout.dataset.activeDevice; else layout.dataset.activeDevice = oldLayout; }
-      for (const mode of modes) mode.classList.toggle('active', activeModes.includes(mode));
-      this.applying = false; this.restoreDrafts();
-    }
-  }
-  private rememberDrafts(): void {
-    for (const key of this.buttons().keys()) for (const [index, field] of this.fields(key).entries()) {
-      this.drafts.set(field, this.read(field, this.fieldId(field, index)));
-    }
-  }
-  restoreDrafts(): void {
-    for (const [field, draft] of this.drafts) {
-      if (!field.isConnected) this.drafts.delete(field);
-      else this.write(field, draft);
-    }
-  }
-  mount(send: (command: SendCommand) => void, ready: () => void, error: (message: string) => void): void {
+  mount(send: (command: SendCommand) => void, error: (message: string) => void): void {
     this.onSend = send;
-    const edited = (event: Event) => {
-      if (this.applying) return;
-      for (const key of this.buttons().keys()) {
-        const fields = this.fields(key), index = fields.indexOf(event.target as Field);
-        if (index >= 0) this.drafts.set(fields[index]!, this.read(fields[index]!, this.fieldId(fields[index]!, index)));
-      }
-    };
-    this.document.addEventListener('input', edited); this.document.addEventListener('change', edited);
-    const observer = new this.document.defaultView!.MutationObserver(records => {
+    const observer = new this.document.defaultView!.MutationObserver(() => {
       this.reconcile(error);
-      if (records.some(record => record.type === 'attributes' && [...this.buttons().values()].includes(record.target as HTMLButtonElement))) ready();
-      // Native send handlers clear fields without input events, including after late replies.
-      if (records.some(record => Array.from(record.addedNodes).some(node => node instanceof this.document.defaultView!.Element &&
-        (node.matches('.toast') || node.parentElement?.id === 'toast-container')))) this.restoreDrafts();
     });
-    observer.observe(this.document, { subtree: true, childList: true, attributes: true, attributeFilter: ['disabled', 'aria-disabled'] });
-    this.stopObservation = () => { observer.disconnect(); this.document.removeEventListener('input', edited); this.document.removeEventListener('change', edited); };
+    observer.observe(this.document, { subtree: true, childList: true });
+    this.stopObservation = () => observer.disconnect();
     this.reconcile(error);
   }
   private reconcile(error: (message: string) => void): void {
     for (const [key, old] of this.replacements) if (!old.native.isConnected) { old.proxy.remove(); this.replacements.delete(key); }
     for (const [key, native] of this.buttons()) {
+      if (!autoCommandKeys.some(command => command === key)) continue;
       if (this.replacements.has(key)) continue;
       const proxy = this.document.createElement('button'); proxy.type = 'button';
       proxy.className = `${native.className} ctrlem-db-queued-send`; proxy.textContent = native.textContent || 'Send';
@@ -143,7 +76,7 @@ export class NativeSend {
     }
   }
   dispose(): void {
-    this.stopObservation?.(); this.restoreDrafts(); this.drafts.clear();
+    this.stopObservation?.();
     for (const { native, proxy, hidden } of this.replacements.values()) {
       native.hidden = hidden; native.classList.remove('ctrlem-db-native-send'); proxy.remove();
     }

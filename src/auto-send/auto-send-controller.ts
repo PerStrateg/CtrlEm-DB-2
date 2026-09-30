@@ -40,9 +40,7 @@ export class AutoSendController {
   }
   start(): void {
     this.intervals?.start();
-    this.page.native.mount(command => { void this.enqueue(command); },
-      () => { void this.client.request({ type: 'auto:ready' }).catch(() => undefined); },
-      message => { this.error = message; this.render(); });
+    this.page.native.mount(command => { void this.enqueue(command); }, message => { this.error = message; this.render(); });
     this.cleanups.push(this.client.subscribe(snapshot => {
       if (snapshot) this.accept(snapshot); else this.connected = false;
       this.render();

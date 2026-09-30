@@ -12,7 +12,7 @@ import { UploadController } from '../upload/upload-controller';
 import { ExtensionUploadClient } from '../upload/extension-upload-client';
 import { AutoSendPage } from '../site/auto-send-page';
 import { AutoSendController } from '../auto-send/auto-send-controller';
-import { ExtensionAutoClient, bindAutoExecutor } from '../auto-send/extension-auto-client';
+import { ExtensionAutoClient, bindAutoPage } from '../auto-send/extension-auto-client';
 import { IntervalController } from '../auto-send/interval-controller';
 import { ExtensionIntervalClient } from '../auto-send/extension-interval-client';
 import { commands, commandKeys } from '../model/commands';
@@ -63,7 +63,7 @@ const capture = new CaptureController(fields, client, (key, value) => pickers.is
 const uploads = new UploadController(fields, client, new ExtensionUploadClient(), pickers,
   (initiator, back) => shell.openSettings(initiator, back));
 const autoPage = new AutoSendPage(document, fields);
-const unbindAuto = bindAutoExecutor(autoPage);
+const unbindAuto = bindAutoPage(autoPage);
 const autoSend = new AutoSendController(autoPage, fields, pickers, new ExtensionAutoClient(), command => {
   const key = commandKeys.find(key => key === command.key);
   if (key) { const value = command.fields.find(field => field.id === commands[key].fieldId)?.value;
