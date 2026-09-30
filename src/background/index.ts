@@ -21,6 +21,7 @@ import { createFilesService, registerFiles } from './files-runtime';
 import { filesPort } from '../shared/files-protocol';
 import { registerMediaSend } from './media-send-runtime';
 import { registerMediaSettings } from './media-settings-runtime';
+import { registerRemoteMediaLibrary } from './remote-media-library-runtime';
 
 const libraryQueue = new WriteQueue();
 const files = createFilesService();
@@ -57,8 +58,10 @@ chrome.runtime.onConnect.addListener(port => {
   port.onDisconnect.addListener(() => { connected = false; upload.close(); });
 });
 
+const library = new LibraryRepository(chrome.storage.local);
+registerRemoteMediaLibrary(library, libraryQueue, credentials, uploadRequest);
 const service = new LibraryService(
-  new LibraryRepository(chrome.storage.local), new EditorSessionRepository(chrome.storage.session),
+  library, new EditorSessionRepository(chrome.storage.session),
   new SelectionRepository(chrome.storage.local), libraryQueue, () => scheduler.libraryChanged(),
 );
 
@@ -68,6 +71,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
   if ((message as { type?: string })?.type?.startsWith('redgifs:')) return false;
   if ((message as { type?: string })?.type?.startsWith('media-send:')) return false;
   if ((message as { type?: string })?.type?.startsWith('media-settings:')) return false;
+  if ((message as { type?: string })?.type?.startsWith('media-library:')) return false;
   if ((message as { type?: string })?.type?.startsWith('interval:')) {
     const parsed = intervalRequestSchema.safeParse(message);
     if (authorizedTab(sender, chrome.runtime.id) === undefined || !parsed.success) {
