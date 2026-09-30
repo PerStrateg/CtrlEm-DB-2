@@ -9,6 +9,7 @@ import { receiverFromUrl, receiverUrl } from '../model/send-command';
 import { authorizedTab } from './library-service';
 import { WriteQueue } from '../storage/library-store';
 import type { FilesSource } from './files-service';
+import { CtrlemCommandApiAdapter, reportCommandApi } from './ctrlem-command-api';
 
 const alarmName = 'ctrlem.auto-send.wake';
 const recipient = receiverFromUrl;
@@ -33,6 +34,7 @@ export function registerAutoSend(queue: WriteQueue, files?: FilesSource): AutoSe
       .catch(() => console.warn('[CtrlEm DB] Could not publish task state.'));
   };
   const failed = () => { clearTimeout(timer); broadcast(undefined); };
+  const commandApi = new CtrlemCommandApiAdapter(fetch, reportCommandApi);
   const scheduler = new AutoSendService(new AutoSendRepository(chrome.storage.session), new LibraryRepository(chrome.storage.local), {
     probe,
     pages: async () => (await Promise.all((await tabs()).map(async tab => {
@@ -42,6 +44,7 @@ export function registerAutoSend(queue: WriteQueue, files?: FilesSource): AutoSe
     }))).flat(),
     execute: async (tabId, execution) => (await chrome.tabs.sendMessage(tabId, { type: 'auto:execute', execution }, { frameId: 0 }) as AutoOutcome | undefined)
       ?? { status: 'paused', reason: 'unknown' },
+    executeApi: execution => commandApi.execute(execution),
     open: async receiver => {
       const existing = (await tabs()).find(tab => tab.url && recipient(tab.url) === receiver);
       if (existing?.id !== undefined) {

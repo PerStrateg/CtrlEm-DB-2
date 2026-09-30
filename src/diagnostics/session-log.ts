@@ -3,7 +3,7 @@ import { commandKeys } from '../model/commands';
 
 export const diagnosticLimits = { maxBytes: 5 * 1024 * 1024, maxEntries: 8192, headerBytes: 4096 };
 const events = ['session.start', 'session.end', 'upload', 'library', 'auto.request', 'auto.execute',
-  'files.import', 'files.prepare', 'files.operation', 'native.send', 'site.error', 'log.export'] as const;
+  'files.import', 'files.prepare', 'files.operation', 'media.api', 'native.send', 'site.error', 'log.export'] as const;
 const commands = [...commandKeys, 'sendOrDelete', 'session', 'other'] as const;
 const mimes = ['image/gif', 'image/png', 'image/jpeg', 'image/webp', 'image/avif', 'image/bmp', 'video/mp4', 'audio/mpeg', 'other'] as const;
 const codes = ['unknown', 'network', 'http', 'invalid-response', 'interrupted', 'file-read', 'unavailable',
@@ -21,6 +21,7 @@ const detailsSchema = z.object({
   durationMs: number, bytes: number, inputBytes: number, outputBytes: number, count: number,
   width: number, height: number, frames: number, status: number, retryAfterMs: number,
   command: z.enum(commands).optional(), mime: z.enum(mimes).optional(),
+  receiverKind: z.enum(['group', 'user']).optional(), requestId: z.string().uuid().optional(),
   provider: z.enum(['imgbb', 'catbox', 'vidhosting']).optional(),
   code: z.enum(codes).optional(),
   stage: z.enum(['access', 'settings', 'page', 'token', 'upload', 'response', 'transfer', 'decode', 'resize', 'encode']).optional(),

@@ -32,7 +32,6 @@ import '../ui/files.css';
 import { diagnosticCommand, recordDiagnostic, startDiagnosticSession } from '../diagnostics/session-log';
 import { observeSiteErrors } from '../site/result-errors';
 import { bindDiagnosticRelay } from '../diagnostics/relay';
-import { bindMediaCapture } from '../media/adapters/ctrlem-media-capture';
 
 // This global belongs to the extension's isolated world, not the page's scripts.
 // Reinjection replaces the previous controller and releases its DOM bindings.
@@ -70,14 +69,13 @@ const autoSend = new AutoSendController(autoPage, fields, pickers, new Extension
   if (key) { const value = command.fields.find(field => field.id === commands[key].fieldId)?.value;
     if (value !== undefined) capture.accepted(key, value); }
 }, new IntervalController(new ExtensionIntervalClient()));
-const unbindMediaCapture = bindMediaCapture(autoPage);
 const redgifs = new RedgifsController(page, results, async url => {
   const command = autoPage.native.capture('videoOverlay', false);
   command.fields = command.fields.map(field => field.id === commands.videoOverlay.fieldId ? { ...field, value: url } : field);
   await autoSend.queueCommand(command);
 });
 const files = new FilesController(page, results, fields, autoPage);
-runtime.ctrlEmLibraryController = { dispose: () => { recordDiagnostic('session.end'); unbindMediaCapture(); unbindDiagnostics(); stopSiteErrors(); stopInfoTips(); files.dispose(); redgifs.dispose(); autoSend.dispose(); unbindAuto(); uploads.dispose(); capture.dispose(); transfer?.dispose(); pickers.dispose(); editor.dispose(); shell.dispose(); } };
+runtime.ctrlEmLibraryController = { dispose: () => { recordDiagnostic('session.end'); unbindDiagnostics(); stopSiteErrors(); stopInfoTips(); files.dispose(); redgifs.dispose(); autoSend.dispose(); unbindAuto(); uploads.dispose(); capture.dispose(); transfer?.dispose(); pickers.dispose(); editor.dispose(); shell.dispose(); } };
 shell.start();
 editor.start();
 pickers.start();

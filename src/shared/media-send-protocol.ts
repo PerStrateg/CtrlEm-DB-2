@@ -13,4 +13,3 @@ const mediaIntentSchema = z.object({ resource: mediaResourceSchema, action: medi
   .refine(({ resource, action }) => resource.kind === 'image' ? action !== 'video-overlay' : action === 'video-overlay');
 
 export const mediaSendRequestSchema = mediaIntentSchema.extend({ type: z.literal('media-send:enqueue') }).strict();
-export const mediaCaptureRequestSchema = mediaIntentSchema.extend({ type: z.literal('media-send:capture') }).strict();
