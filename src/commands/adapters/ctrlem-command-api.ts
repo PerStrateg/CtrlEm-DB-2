@@ -43,7 +43,7 @@ export class CtrlemCommandApiAdapter implements CommandApiPort {
     const timeout = setTimeout(() => controller.abort(), commandApiLimits.timeoutMs);
     try {
       const groupId = receiverKind === 'group' ? execution.receiver.slice('group:'.length) : undefined;
-      const targetDevice = execution.parameters?.device || undefined;
+      const targetDevice = execution.parameters?.device?.toUpperCase() || undefined;
       const body = groupId ? { command: serialized.value, targetDevice } :
         { controlCode: execution.receiver.toUpperCase(), command: serialized.value, targetDevice };
       const request = this.request;
