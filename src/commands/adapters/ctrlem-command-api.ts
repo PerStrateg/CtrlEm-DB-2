@@ -1,16 +1,15 @@
-import type { AutoExecution, AutoOutcome } from '../model/auto-send';
-import { commands, type CommandKey } from '../model/commands';
-import { reportTabDiagnostic } from '../diagnostics/relay';
+import type { AutoExecution, AutoOutcome, SendFailureCode } from '../../model/auto-send';
+import { reportTabDiagnostic } from '../../diagnostics/relay';
+import { apiCommandKey, serializeApiCommand, type ApiCommandKey } from '../domain/api-command';
+import type { CommandApiPort } from '../ports/command-api-port';
 
 export const commandApiLimits = { timeoutMs: 15_000 } as const;
-const supportedCommands = ['popupImage', 'changeWallpaper', 'videoOverlay'] as const satisfies readonly CommandKey[];
-type SupportedCommand = typeof supportedCommands[number];
 
 export interface CommandApiDiagnostic {
   event: 'start' | 'response' | 'failure';
   requestId: string;
   receiverKind: 'group' | 'user';
-  command: SupportedCommand;
+  command: ApiCommandKey;
   durationMs?: number;
   status?: number;
   code?: 'http' | 'network' | 'timeout' | 'validation';
@@ -27,20 +26,16 @@ function retryAfter(response: Response, now: number): number | undefined {
   return Number.isFinite(milliseconds) && milliseconds > 0 ? milliseconds : undefined;
 }
 
-function commandValue(execution: AutoExecution, command: SupportedCommand): string | undefined {
-  return execution.value ?? execution.parameters?.fields.find(field => field.id === commands[command].fieldId)?.value;
-}
-
-export class CtrlemCommandApiAdapter {
+export class CtrlemCommandApiAdapter implements CommandApiPort {
   constructor(private readonly request: typeof fetch, private readonly report: CommandApiReporter,
     private readonly now = Date.now) {}
 
   async execute(execution: AutoExecution): Promise<AutoOutcome> {
-    const command = supportedCommands.find(value => value === execution.command);
+    const command = apiCommandKey(execution.command);
     const receiverKind = execution.receiver.startsWith('group:') ? 'group' : 'user';
-    if (!command) return this.invalid(execution, receiverKind);
-    const value = commandValue(execution, command);
-    if (!value || !this.validUrl(value)) return this.invalid(execution, receiverKind, command);
+    if (!command) return { status: 'paused', reason: 'invalid', failureCode: 'rejected' };
+    const serialized = serializeApiCommand(execution);
+    if (!serialized.ok) return this.invalid(execution, receiverKind, command, serialized.failureCode);
 
     const requestId = execution.token, startedAt = this.now();
     this.report({ event: 'start', requestId, receiverKind, command });
@@ -48,12 +43,15 @@ export class CtrlemCommandApiAdapter {
     const timeout = setTimeout(() => controller.abort(), commandApiLimits.timeoutMs);
     try {
       const groupId = receiverKind === 'group' ? execution.receiver.slice('group:'.length) : undefined;
+      const targetDevice = execution.parameters?.device || undefined;
+      const body = groupId ? { command: serialized.value, targetDevice } :
+        { controlCode: execution.receiver.toUpperCase(), command: serialized.value, targetDevice };
       const request = this.request;
-      const response = await request(groupId ? `https://ctrlem.com/api/groups/${encodeURIComponent(groupId)}/command` : 'https://ctrlem.com/api/command', {
+      const response = await request(groupId
+        ? `https://ctrlem.com/api/groups/${encodeURIComponent(groupId)}/command`
+        : 'https://ctrlem.com/api/command', {
         method: 'POST', credentials: 'include', cache: 'no-store', signal: controller.signal,
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(groupId ? { command: `${command} ${value}` } :
-          { controlCode: execution.receiver.toUpperCase(), command: `${command} ${value}` }),
+        headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
       });
       const durationMs = this.now() - startedAt;
       if (response.ok) {
@@ -74,13 +72,10 @@ export class CtrlemCommandApiAdapter {
     } finally { clearTimeout(timeout); }
   }
 
-  private validUrl(value: string): boolean {
-    try { return ['http:', 'https:'].includes(new URL(value).protocol); } catch { return false; }
-  }
-
-  private invalid(execution: AutoExecution, receiverKind: 'group' | 'user', command: SupportedCommand = 'popupImage'): AutoOutcome {
+  private invalid(execution: AutoExecution, receiverKind: 'group' | 'user', command: ApiCommandKey,
+    failureCode: SendFailureCode): AutoOutcome {
     this.report({ event: 'failure', requestId: execution.token, receiverKind, command, code: 'validation' });
-    return { status: 'paused', reason: 'invalid', failureCode: 'url' };
+    return { status: 'paused', reason: 'invalid', failureCode };
   }
 }
 
@@ -94,6 +89,6 @@ export function reportCommandApi(diagnostic: CommandApiDiagnostic): void {
     retryAfterMs: diagnostic.retryAfterMs,
   };
   void chrome.tabs.query({ url: ['https://ctrlem.com/u/*', 'https://ctrlem.com/groups/*'] }).then(tabs => {
-    for (const tab of tabs) if (tab.id !== undefined) reportTabDiagnostic(tab.id, 'media.api', details);
+    for (const tab of tabs) if (tab.id !== undefined) reportTabDiagnostic(tab.id, 'command.api', details);
   }).catch(() => console.warn('[CtrlEm DB][command-api]', { event: 'diagnostic-relay-failure' }));
 }

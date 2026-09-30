@@ -3,7 +3,7 @@ import { commandKeys } from '../model/commands';
 
 export const diagnosticLimits = { maxBytes: 5 * 1024 * 1024, maxEntries: 8192, headerBytes: 4096 };
 const events = ['session.start', 'session.end', 'upload', 'library', 'auto.request', 'auto.execute',
-  'files.import', 'files.prepare', 'files.operation', 'media.api', 'native.send', 'site.error', 'log.export'] as const;
+  'files.import', 'files.prepare', 'files.operation', 'command.api', 'native.send', 'site.error', 'log.export'] as const;
 const commands = [...commandKeys, 'sendOrDelete', 'session', 'other'] as const;
 const mimes = ['image/gif', 'image/png', 'image/jpeg', 'image/webp', 'image/avif', 'image/bmp', 'video/mp4', 'audio/mpeg', 'other'] as const;
 const codes = ['unknown', 'network', 'http', 'invalid-response', 'interrupted', 'file-read', 'unavailable',

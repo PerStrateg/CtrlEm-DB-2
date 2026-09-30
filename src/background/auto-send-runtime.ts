@@ -9,7 +9,7 @@ import { receiverFromUrl, receiverUrl } from '../model/send-command';
 import { authorizedTab } from './library-service';
 import { WriteQueue } from '../storage/library-store';
 import type { FilesSource } from './files-service';
-import { CtrlemCommandApiAdapter, reportCommandApi } from './ctrlem-command-api';
+import { CtrlemCommandApiAdapter, reportCommandApi } from '../commands/adapters/ctrlem-command-api';
 
 const alarmName = 'ctrlem.auto-send.wake';
 const recipient = receiverFromUrl;
