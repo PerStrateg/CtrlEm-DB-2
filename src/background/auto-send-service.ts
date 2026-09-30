@@ -27,6 +27,8 @@ export class AutoSendService {
   private readonly filePreparations = new Map<string, { token: string; abort: AbortController }>();
   private fileUpload?: { id: string; itemId: string; abort: AbortController };
   private readyReceivers: string[] = [];
+  private readonly manualOutcomes = new Map<string, 'success' | 'failed'>();
+  private readonly manualWaiters = new Set<() => void>();
   constructor(private readonly repository: AutoSendRepository, private readonly library: LibraryRepository,
     private readonly transport: AutoTransport, private readonly now = Date.now,
     private readonly queue = new WriteQueue(), private readonly files?: FilesSource,
@@ -262,6 +264,17 @@ export class AutoSendService {
       return this.snapshot();
     });
   }
+  waitManual(ids: string[]): Promise<{ sent: number; failed: number }> {
+    return new Promise(resolve => {
+      const inspect = () => {
+        const outcomes = ids.map(id => this.manualOutcomes.get(id) ?? (this.state.sends.find(send => send.id === id)?.status === 'paused' ? 'failed' : undefined));
+        if (outcomes.some(outcome => outcome === undefined)) return;
+        this.manualWaiters.delete(inspect); for (const id of ids) this.manualOutcomes.delete(id);
+        resolve({ sent: outcomes.filter(outcome => outcome === 'success').length, failed: outcomes.filter(outcome => outcome === 'failed').length });
+      };
+      this.manualWaiters.add(inspect); inspect();
+    });
+  }
   private detach(state: AutoState, tabId: number): void {
     for (const entry of this.entries(state).filter(entry => entry.source === 'files' && entry.tabId === tabId)) {
       delete entry.preparation;
@@ -460,6 +473,7 @@ export class AutoSendService {
       if (manual(task)) state.sends = state.sends.filter(entry => entry !== task);
       else state.tasks = state.tasks.filter(entry => entry !== task);
     };
+    if (manual(task) && (outcome.status === 'success' || outcome.reason === 'unknown')) this.manualOutcomes.set(task.id, outcome.status === 'success' ? 'success' : 'failed');
     if (task.status === 'stopping') remove();
     else if (task.execution?.sourceInvalidated) {
       if (outcome.status === 'paused' && outcome.reason === 'unknown') this.notice(state, task);
@@ -485,5 +499,6 @@ export class AutoSendService {
     if (this.fault) for (const candidate of this.entries(state)) this.pause(candidate, 'storage');
     await this.reconcileSources(state);
     await this.commit(state);
+    for (const waiter of this.manualWaiters) waiter();
   }
 }

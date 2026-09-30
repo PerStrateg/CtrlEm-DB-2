@@ -73,7 +73,7 @@ export class MediaComposer {
   }
   private async send(action: MediaAction): Promise<void> {
     if (!this.resource || !this.preferences?.selectedRecipients.length) return this.status('Choose recipients.', true); this.busy(true); this.status('Adding to queue…');
-    try { await this.sender.send({ resource: this.resource, action }); this.toast(`Queued for ${this.preferences.selectedRecipients.length}`); this.close(); }
+    try { const result = await this.sender.send({ resource: this.resource, action }); this.toast(result.failed ? `Sent ${result.sent}, failed ${result.failed}` : `Sent to ${result.sent}`); this.close(); }
     catch (error) { this.status(error instanceof Error ? error.message : 'Couldn’t send.', true); this.busy(false); }
   }
   private position(): void {
