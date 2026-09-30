@@ -4,7 +4,7 @@ import type { AutoCommandKey, AutoState } from '../model/auto-send';
 import type { Item } from '../model/library';
 import type { SendCommand } from '../model/send-command';
 
-const sendCommandSchema = z.object({ key: z.string().min(1), label: z.string(),
+export const sendCommandSchema = z.object({ key: z.string().min(1), label: z.string(),
   fields: z.array(z.object({ id: z.string().min(1), value: z.string(), checked: z.boolean().optional() }).strict()),
   device: z.string().optional(), mode: z.string().optional() }).strict();
 

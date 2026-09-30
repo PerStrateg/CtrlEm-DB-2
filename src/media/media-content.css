@@ -1,0 +1,22 @@
+.ctrlem-media-host { position: relative !important; }
+.ctrlem-media-actions {
+  position: absolute; right: 7px; bottom: 7px; z-index: 2147483646;
+  display: flex; gap: 4px; padding: 3px; border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 10px; background: rgb(18 19 23 / 42%); opacity: .62;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 24%); backdrop-filter: blur(7px);
+  transition: opacity 120ms ease, background-color 120ms ease;
+}
+.ctrlem-media-host:hover > .ctrlem-media-actions, .ctrlem-media-actions:focus-within {
+  background: rgb(18 19 23 / 68%); opacity: .9;
+}
+.ctrlem-media-send {
+  position: static; width: 24px; height: 24px; padding: 0; border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 7px; background: rgb(31 33 40 / 68%); color: rgb(255 255 255 / 78%);
+  font: 700 11px/22px system-ui, sans-serif; cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
+}
+.ctrlem-media-send:hover { color: #fff; border-color: rgb(255 255 255 / 38%); background: rgb(54 57 67 / 92%); }
+.ctrlem-media-send:focus-visible { color: #fff; outline: 2px solid #f0a34a; outline-offset: 1px; }
+.ctrlem-media-send:disabled { cursor: wait; }
+.ctrlem-media-actions-floating { position: fixed; right: auto; bottom: auto; transform: translate(-100%, -100%); }
+@media (prefers-reduced-motion: reduce) { .ctrlem-media-actions, .ctrlem-media-send { transition: none; } }

@@ -19,10 +19,12 @@ import { IntervalRepository } from '../storage/interval-store';
 import { intervalRequestSchema } from '../shared/interval-protocol';
 import { createFilesService, registerFiles } from './files-runtime';
 import { filesPort } from '../shared/files-protocol';
+import { registerMediaSend } from './media-send-runtime';
 
 const libraryQueue = new WriteQueue();
 const files = createFilesService();
 const scheduler = registerAutoSend(libraryQueue, files);
+registerMediaSend(scheduler);
 registerFiles(files, () => scheduler.clearFiles(), id => scheduler.removeFile(id, () => files.remove(id)));
 registerImageCache();
 registerRedgifs();
@@ -62,6 +64,7 @@ const service = new LibraryService(
 chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
   if ((message as { type?: string })?.type?.startsWith('files:')) return false;
   if ((message as { type?: string })?.type?.startsWith('redgifs:')) return false;
+  if ((message as { type?: string })?.type?.startsWith('media-send:')) return false;
   if ((message as { type?: string })?.type?.startsWith('interval:')) {
     const parsed = intervalRequestSchema.safeParse(message);
     if (authorizedTab(sender, chrome.runtime.id) === undefined || !parsed.success) {
