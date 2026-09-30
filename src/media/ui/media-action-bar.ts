@@ -6,10 +6,10 @@ export class MediaActionBar {
   readonly element: HTMLDivElement;
   private readonly buttons = new Map<MediaAction, MediaSendButton>();
 
-  constructor(document: Document, sender: MediaSendPort, resource: MediaResource) {
+  constructor(document: Document, sender: MediaSendPort, resource: MediaResource, showWallpaper: boolean) {
     this.element = document.createElement('div');
     this.element.className = 'ctrlem-media-actions';
-    for (const action of mediaActions(resource.kind)) {
+    for (const action of mediaActions(resource.kind).filter(action => action !== 'wallpaper' || showWallpaper)) {
       const button = new MediaSendButton(document, action, sender);
       button.set(resource);
       this.buttons.set(action, button);

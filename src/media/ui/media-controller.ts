@@ -11,7 +11,8 @@ export class MediaController {
   private observer?: MutationObserver;
   private scheduled = false;
 
-  constructor(private readonly document: Document, private readonly sender: MediaSendPort) {}
+  constructor(private readonly document: Document, private readonly sender: MediaSendPort,
+    private readonly showWallpaper: boolean) {}
 
   start(): void {
     if (this.discord.matches(this.document)) {
@@ -31,7 +32,7 @@ export class MediaController {
     if (!target || !this.hover) return this.hideHover();
     if (!this.hover || this.hover.element.dataset.kind !== target.resource.kind) {
       this.hover?.remove();
-      this.hover = new MediaActionBar(this.document, this.sender, target.resource);
+      this.hover = new MediaActionBar(this.document, this.sender, target.resource, this.showWallpaper);
       this.hover.element.dataset.kind = target.resource.kind;
       this.hover.element.classList.add('ctrlem-media-actions-floating');
     } else this.hover.set(target.resource);
@@ -54,7 +55,7 @@ export class MediaController {
     for (const target of this.discord.scan(this.document)) {
       found.add(target.resource.id);
       let bar = this.persistent.get(target.resource.id);
-      if (!bar) { bar = new MediaActionBar(this.document, this.sender, target.resource); this.persistent.set(target.resource.id, bar); }
+      if (!bar) { bar = new MediaActionBar(this.document, this.sender, target.resource, this.showWallpaper); this.persistent.set(target.resource.id, bar); }
       bar.set(target.resource);
       target.element.classList.add('ctrlem-media-host');
       if (bar.element.parentElement !== target.element) {

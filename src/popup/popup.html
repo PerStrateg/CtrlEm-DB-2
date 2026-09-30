@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CtrlEm</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <header>
+      <strong>CtrlEm</strong>
+      <label class="switch"><input id="enabled" type="checkbox"><span>On</span></label>
+    </header>
+
+    <section class="selected-section" aria-labelledby="selected-title">
+      <div class="section-title"><span id="selected-title">Send to</span><small id="selected-count"></small></div>
+      <div id="selected" class="chips"></div>
+    </section>
+
+    <section class="directory" aria-label="Recipients">
+      <nav><button class="tab active" data-kind="group" type="button">Groups</button><button class="tab" data-kind="user" type="button">People</button></nav>
+      <input id="search" type="search" placeholder="Search" autocomplete="off">
+      <div id="recipients" class="recipient-list"><p class="muted">Loading…</p></div>
+    </section>
+
+    <section class="options">
+      <label><input id="wallpaper" type="checkbox"> Show W</label>
+      <button id="exclude" class="quiet" type="button" hidden></button>
+      <details>
+        <summary>Excluded sites <span id="excluded-count"></span></summary>
+        <div id="excluded" class="excluded-list"></div>
+      </details>
+    </section>
+    <p id="status" role="status"></p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>
