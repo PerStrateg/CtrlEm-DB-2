@@ -18,3 +18,15 @@ a { color: var(--accent-primary); }
 :root:has(body.embedded) { background: transparent; }
 body.embedded { padding: 0; }
 .embedded h1 { display: none; }
+.ctrlem-media-settings { border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: var(--ctrlem-db-space-4); display: grid; gap: var(--ctrlem-db-space-3); background: var(--bg-secondary); }
+.ctrlem-media-settings header, .ctrlem-setting, .ctrlem-excluded-row { display: flex; align-items: center; gap: var(--ctrlem-db-space-3); }
+.ctrlem-media-settings header div, .ctrlem-setting span { display: grid; }
+.ctrlem-media-settings header small, .ctrlem-setting small, .ctrlem-media-settings details { color: var(--text-secondary); }
+.ctrlem-brand { display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--border-radius); background: var(--accent-primary); font-weight: 800; }
+.ctrlem-setting, .ctrlem-excluded-row { justify-content: space-between; }
+.ctrlem-setting { padding: var(--ctrlem-db-space-3); border: 1px solid var(--border-color); border-radius: var(--border-radius); background: var(--bg-tertiary); }
+.ctrlem-setting input { width: 18px; height: 18px; accent-color: var(--accent-primary); }
+.ctrlem-site-action { width: 100%; }
+.ctrlem-excluded { display: grid; gap: var(--ctrlem-db-space-2); max-height: 120px; overflow: auto; margin-top: var(--ctrlem-db-space-2); }
+.ctrlem-excluded-row button { border: 0; background: transparent; color: var(--text-secondary); }
+.ctrlem-settings-status { min-height: 1.5em; }.ctrlem-settings-status.error { color: #ff8f8f; }

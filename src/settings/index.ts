@@ -8,11 +8,14 @@ import '../ui/extension-theme.css';
 import './settings.css';
 import { mountProviderAccess } from './provider-access-view';
 import { mountImageCacheSettings } from './image-cache-view';
+import { ExtensionMediaSettingsClient } from '../media/adapters/extension-media-settings-client';
+import { MediaSettingsView } from '../media/ui/media-settings-view';
 
 const root = document.querySelector('main')!;
 const uploads = document.createElement('section'); uploads.className = 'ctrlem-db-settings-block';
 const storage = document.createElement('div'); storage.className = 'ctrlem-db-settings-block';
-root.append(uploads, storage);
+const media = new MediaSettingsView(document, new ExtensionMediaSettingsClient());
+root.append(media.element, uploads, storage); void media.load();
 mountInfoTips(document);
 mountImageCacheSettings(document, storage);
 const embedded = window.top !== window;
