@@ -2,6 +2,9 @@ import { DiscordMediaSource } from '../adapters/discord-media-source';
 import { HtmlMediaSource } from '../adapters/html-media-source';
 import type { MediaSendPort } from '../ports/media-send-port';
 import { MediaActionBar } from './media-action-bar';
+import { MediaComposer } from './media-composer';
+import type { MediaSettingsPort } from '../ports/media-settings-port';
+import type { MediaLibraryPort } from '../ports/media-library-port';
 
 export class MediaController {
   private readonly discord = new DiscordMediaSource();
@@ -10,9 +13,12 @@ export class MediaController {
   private hover?: MediaActionBar;
   private observer?: MutationObserver;
   private scheduled = false;
+  private readonly composer: MediaComposer;
 
   constructor(private readonly document: Document, private readonly sender: MediaSendPort,
-    private readonly showWallpaper: boolean) {}
+    settings: MediaSettingsPort, library: MediaLibraryPort, showWallpaper: boolean) {
+    this.composer = new MediaComposer(document, settings, sender, library, showWallpaper);
+  }
 
   start(): void {
     if (this.discord.matches(this.document)) {
@@ -32,7 +38,7 @@ export class MediaController {
     if (!target || !this.hover) return this.hideHover();
     if (!this.hover || this.hover.element.dataset.kind !== target.resource.kind) {
       this.hover?.remove();
-      this.hover = new MediaActionBar(this.document, this.sender, target.resource, this.showWallpaper);
+      this.hover = new MediaActionBar(this.document, target.resource, this.openComposer);
       this.hover.element.dataset.kind = target.resource.kind;
       this.hover.element.classList.add('ctrlem-media-actions-floating');
     } else this.hover.set(target.resource);
@@ -55,7 +61,7 @@ export class MediaController {
     for (const target of this.discord.scan(this.document)) {
       found.add(target.resource.id);
       let bar = this.persistent.get(target.resource.id);
-      if (!bar) { bar = new MediaActionBar(this.document, this.sender, target.resource, this.showWallpaper); this.persistent.set(target.resource.id, bar); }
+      if (!bar) { bar = new MediaActionBar(this.document, target.resource, this.openComposer); this.persistent.set(target.resource.id, bar); }
       bar.set(target.resource);
       target.element.classList.add('ctrlem-media-host');
       if (bar.element.parentElement !== target.element) {
@@ -71,6 +77,7 @@ export class MediaController {
     this.document.removeEventListener('pointerover', this.hoverMedia, true);
     this.document.removeEventListener('focusin', this.hoverMedia, true);
     this.document.defaultView!.removeEventListener('scroll', this.hideHover, true);
-    this.hover?.remove(); for (const bar of this.persistent.values()) bar.remove(); this.persistent.clear();
+    this.composer.dispose(); this.hover?.remove(); for (const bar of this.persistent.values()) bar.remove(); this.persistent.clear();
   }
+  private readonly openComposer = (resource: import('../domain/media-resource').MediaResource, anchor: HTMLElement) => { void this.composer.open(resource, anchor); };
 }

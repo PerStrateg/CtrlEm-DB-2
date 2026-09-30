@@ -1,33 +1,17 @@
-import { mediaActions, type MediaAction, type MediaResource } from '../domain/media-resource';
-import type { MediaSendPort } from '../ports/media-send-port';
-import { MediaSendButton } from './media-send-button';
+import type { MediaResource } from '../domain/media-resource';
 
 export class MediaActionBar {
   readonly element: HTMLDivElement;
-  private readonly buttons = new Map<MediaAction, MediaSendButton>();
-
-  constructor(document: Document, sender: MediaSendPort, resource: MediaResource, showWallpaper: boolean) {
-    this.element = document.createElement('div');
-    this.element.className = 'ctrlem-media-actions';
-    for (const action of mediaActions(resource.kind).filter(action => action !== 'wallpaper' || showWallpaper)) {
-      const button = new MediaSendButton(document, action, sender);
-      button.set(resource);
-      this.buttons.set(action, button);
-      this.element.append(button.element);
-    }
+  private resource: MediaResource;
+  private readonly button: HTMLButtonElement;
+  constructor(document: Document, resource: MediaResource, open: (resource: MediaResource, anchor: HTMLElement) => void) {
+    this.resource = resource; this.element = document.createElement('div'); this.element.className = 'ctrlem-media-actions';
+    const button = document.createElement('button'); this.button = button; button.type = 'button'; button.className = 'ctrlem-media-trigger';
+    button.textContent = 'C'; button.title = 'Open CtrlEm'; button.setAttribute('aria-label', 'Open CtrlEm media actions');
+    for (const event of ['pointerdown', 'mousedown', 'touchstart']) button.addEventListener(event, stop, true);
+    button.addEventListener('click', event => { stop(event); open(this.resource, button); }, true); this.element.append(button);
   }
-
-  set(resource: MediaResource): void {
-    for (const button of this.buttons.values()) {
-      button.set(resource);
-      if (button.element.parentElement !== this.element) this.element.append(button.element);
-    }
-  }
-
-  remove(): void {
-    for (const button of this.buttons.values()) button.remove();
-    const parent = this.element.parentElement;
-    this.element.remove();
-    if (parent && !parent.querySelector('.ctrlem-media-actions')) parent.classList.remove('ctrlem-media-host');
-  }
+  set(resource: MediaResource): void { this.resource = resource; if (this.button.parentElement !== this.element) this.element.append(this.button); }
+  remove(): void { const parent = this.element.parentElement; this.element.remove(); if (parent && !parent.querySelector('.ctrlem-media-actions')) parent.classList.remove('ctrlem-media-host'); }
 }
+function stop(event: Event): void { event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation(); }
