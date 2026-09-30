@@ -20,20 +20,13 @@ const hostnameSchema = z.string().min(1).max(mediaSettingsLimits.hostnameCharact
 export const mediaSettingsSchema = z.object({
   enabled: z.boolean(),
   showWallpaper: z.boolean(),
-  selectedRecipients: z.array(mediaRecipientSchema),
   excludedHosts: z.array(hostnameSchema),
-}).strict().refine(value => new Set(value.selectedRecipients.map(item => item.receiver)).size === value.selectedRecipients.length)
-  .refine(value => new Set(value.excludedHosts).size === value.excludedHosts.length);
+}).strict().refine(value => new Set(value.excludedHosts).size === value.excludedHosts.length);
 export type MediaSettings = z.infer<typeof mediaSettingsSchema>;
 
 export const defaultMediaSettings = (): MediaSettings => ({
   enabled: true,
   showWallpaper: true,
-  selectedRecipients: [{
-    receiver: 'group:912b55df-0678-46bc-a5c3-b0d39a803740',
-    kind: 'group',
-    label: 'test',
-  }],
   excludedHosts: [],
 });
 

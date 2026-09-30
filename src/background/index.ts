@@ -26,7 +26,7 @@ const libraryQueue = new WriteQueue();
 const files = createFilesService();
 const scheduler = registerAutoSend(libraryQueue, files);
 const mediaSettings = registerMediaSettings();
-registerMediaSend(scheduler, mediaSettings);
+registerMediaSend(scheduler, mediaSettings.settings, mediaSettings.composer);
 registerFiles(files, () => scheduler.clearFiles(), id => scheduler.removeFile(id, () => files.remove(id)));
 registerImageCache();
 registerRedgifs();

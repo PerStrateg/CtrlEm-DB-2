@@ -24,12 +24,16 @@ export class CtrlemRecipientDirectoryAdapter implements RecipientDirectoryPort {
     return [...groups, ...users];
   }
 
-  private async groups(): Promise<MediaRecipient[]> {
+  search(kind: MediaRecipient['kind'], query: string): Promise<MediaRecipient[]> {
+    return kind === 'group' ? this.groups(query) : query ? this.searchUsers(query) : this.users();
+  }
+
+  private async groups(query = ''): Promise<MediaRecipient[]> {
     this.report({ event: 'start', source: 'groups' });
     try {
-      const first = await this.groupPage(1);
+      const first = await this.groupPage(1, query);
       const pages = [first];
-      for (let page = 2; page <= first.pagination.totalPages; page++) pages.push(await this.groupPage(page));
+      for (let page = 2; page <= first.pagination.totalPages; page++) pages.push(await this.groupPage(page, query));
       const recipients = pages.flatMap(page => page.groups)
         .filter(group => group.isMember || group.isOwner)
         .map(group => ({ receiver: `group:${group.id}`, kind: 'group' as const, label: group.name }));
@@ -40,9 +44,10 @@ export class CtrlemRecipientDirectoryAdapter implements RecipientDirectoryPort {
     }
   }
 
-  private async groupPage(page: number) {
+  private async groupPage(page: number, query: string) {
     const request = this.request;
-    const response = await request(`https://ctrlem.com/api/groups?page=${page}&myGroups=true`, requestInit);
+    const search = query ? `&q=${encodeURIComponent(query)}` : '';
+    const response = await request(`https://ctrlem.com/api/groups?page=${page}&myGroups=true${search}`, requestInit);
     if (!response.ok) throw new ResponseError(response.status);
     return groupsPageSchema.parse(await response.json());
   }
@@ -58,6 +63,21 @@ export class CtrlemRecipientDirectoryAdapter implements RecipientDirectoryPort {
       const recipients = users.flatMap(user => user ? [{
         receiver: user.controlCode.toLowerCase(), kind: 'user' as const, label: user.username,
       }] : []);
+      this.report({ event: 'success', source: 'friends', count: recipients.length });
+      return recipients;
+    } catch (error) {
+      this.report({ event: 'failure', source: 'friends', status: statusOf(error) }); throw error;
+    }
+  }
+
+  private async searchUsers(query: string): Promise<MediaRecipient[]> {
+    this.report({ event: 'start', source: 'friends' });
+    try {
+      const response = await this.request(`https://ctrlem.com/api/users/search?q=${encodeURIComponent(query)}&limit=10`, requestInit);
+      if (!response.ok) throw new ResponseError(response.status);
+      const recipients = z.array(userSchema).parse(await response.json()).map(user => ({
+        receiver: user.controlCode.toLowerCase(), kind: 'user' as const, label: user.username,
+      }));
       this.report({ event: 'success', source: 'friends', count: recipients.length });
       return recipients;
     } catch (error) {
