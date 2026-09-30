@@ -1,6 +1,6 @@
 {
   "name": "ctrlem-db",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "private": true,
   "description": "CtrlEm DB browser extension by Strateg",
   "type": "module",

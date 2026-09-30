@@ -1,6 +1,6 @@
 # Ctrlem DB privacy policy
 
-Version 2.0.2 | Strateg | September 27, 2026
+Version 2.0.3 | Strateg | October 1, 2026
 
 Ctrlem DB contains no analytics or telemetry and does not send user data to its developer. Your library and settings are stored locally in your browser profile. The extension does not use browser sync for this data.
 
@@ -14,12 +14,14 @@ Each CtrlEm tab also keeps a bounded diagnostic log in memory, reset when the pa
 
 | Feature | Data and destination |
 | --- | --- |
-| CtrlEm Send and automatic sending | Selected text, media URLs, command parameters and recipient information go to CtrlEm through its normal authorized controls. |
+| CtrlEm Send and automatic sending | Selected text, media URLs, command parameters and recipient information go to CtrlEm through its authenticated command API. |
 | Local Upload (LU) | Images are processed locally using bundled ImageMagick WASM. Selected images are then uploaded to CtrlEm. |
 | ImgBB image uploads | Selected image files go to ImgBB, with your configured API key or a temporary token obtained from ImgBB for anonymous uploads. |
 | Catbox audio uploads | Selected audio files go to Catbox, with your userhash if configured. |
 | VidHosting video uploads | Selected video files go to VidHosting. |
 | RedGifs | Embedded pages, searches, API calls and video playback contact RedGifs and its media hosts. The integration uses temporary API tokens and browser cookies, including copying RedGifs cookies into the CtrlEm storage partition for embedded access. |
+| Save website media | A file you choose is downloaded without source cookies, then uploaded through the corresponding image/video provider and added to your local library. |
+| Send website media | On HTTP/HTTPS pages, the extension identifies direct image and video URLs. Only a URL chosen with an I, W or V action is passed to CtrlEm through its authenticated command API. Page text, cookies and file bodies are not sent by this action. |
 | Preview and cache | Media URLs in your library are requested from their hosts and CDNs for previews and local caching. Background cache requests omit credentials and the Referer header; embedded pages and ordinary browser media requests can use browser-managed cookies and referrers. |
 
 Keys and other authorization data are sent to their corresponding providers. The developer does not receive them. Files, messages and authorization data can contain personal information. Services receiving requests also receive ordinary network metadata, such as your IP address. Their own privacy policies, tracking and retention practices apply. The extension cannot guarantee that third-party pages contain no analytics.
@@ -36,7 +38,7 @@ Firefox declarations remain `authenticationInfo` and `personallyIdentifyingInfo`
 - **alarms:** wake the background process for queued and automatic sending.
 - **cookies / webRequest:** support RedGifs authentication and partitioned cookies when embedded in CtrlEm.
 - **declarativeNetRequest:** embedding rules and selected advertising-request blocking. Existing rules remove CSP from CtrlEm pages and CSP/X-Frame-Options from embedded RedGifs responses.
-- **Host access:** CtrlEm, RedGifs and the configured upload services provide the features above. Optional access to additional HTTP/HTTPS hosts is requested for media URLs when needed.
+- **Host access:** HTTP/HTTPS access lets the extension show I, W and V actions beside direct website media, operate CtrlEm and RedGifs integration, contact upload services and load selected library media.
 - **wasm-unsafe-eval:** allows the bundled ImageMagick WASM to process images locally.
 
 The existing RedGifs integration also hides its CookieYes consent interface. This behavior and response-header removal require separate review; hiding the interface does not prevent third-party data collection or establish consent.
