@@ -28,6 +28,16 @@ export function registerRemoteMediaLibrary(library: LibraryRepository, queue: Wr
 async function save(input: unknown, library: LibraryRepository, queue: WriteQueue, credentials: CredentialsRepository,
   request: typeof fetch, signal: AbortSignal, progress: (value: object) => void): Promise<void> {
   const { resource, categoryId } = remoteMediaSaveSchema.parse(input); const provider = providerForType[resource.kind]; const limit = providers[provider].maxBytes;
+  const file = await downloadRemoteMedia(resource, request, signal, progress, limit);
+  const invalid = uploadFileError(provider, resource.kind, file); if (invalid) throw new Error(invalid);
+  const keys = { imgbb: resource.kind === 'image' ? await credentials.readField('imgbb') : '', catbox: '' };
+  progress({ stage: 'upload' }); const url = await uploadFile(provider, file, keys, signal, request);
+  progress({ stage: 'save' }); const result = await queue.run(() => library.addUpload(resource.kind, { categoryId, value: url, label: file.name }));
+  if (result.status !== 'saved') throw new Error('category');
+}
+
+export async function downloadRemoteMedia(resource: { url: string; kind: MediaKind }, request: typeof fetch,
+  signal: AbortSignal, progress: (value: object) => void, limit = providers[providerForType[resource.kind]].maxBytes): Promise<File> {
   progress({ stage: 'download' });
   const response = await request(resource.url, { credentials: 'omit', cache: 'no-store', signal });
   if (!response.ok || !['http:', 'https:'].includes(new URL(response.url || resource.url).protocol)) throw new Error('download');
@@ -36,11 +46,7 @@ async function save(input: unknown, library: LibraryRepository, queue: WriteQueu
   const parts: Uint8Array<ArrayBuffer>[] = []; let size = 0;
   while (true) { const chunk = await reader.read(); if (chunk.done) break; size += chunk.value.byteLength; if (size > limit) { await reader.cancel(); throw new Error('size'); } parts.push(chunk.value); progress({ stage: 'download', loaded: size, ...(declared ? { total: declared } : {}) }); }
   const mime = response.headers.get('content-type')?.split(';')[0]?.trim() ?? ''; const name = fileName(resource.url, resource.kind, mime);
-  const file = new File(parts, name, { type: mime }); const invalid = uploadFileError(provider, resource.kind, file); if (invalid) throw new Error(invalid);
-  const keys = { imgbb: resource.kind === 'image' ? await credentials.readField('imgbb') : '', catbox: '' };
-  progress({ stage: 'upload' }); const url = await uploadFile(provider, file, keys, signal, request);
-  progress({ stage: 'save' }); const result = await queue.run(() => library.addUpload(resource.kind, { categoryId, value: url, label: name }));
-  if (result.status !== 'saved') throw new Error('category');
+  return new File(parts, name, { type: mime });
 }
 
 function fileName(source: string, kind: MediaKind, mime: string): string {

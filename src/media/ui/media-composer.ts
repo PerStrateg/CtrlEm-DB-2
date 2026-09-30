@@ -6,6 +6,12 @@ import type { MediaAction, MediaResource } from '../domain/media-resource';
 import type { MediaLibraryPort } from '../ports/media-library-port';
 
 const viewportMargin = 10, anchorGap = 8, searchDelayMs = 250, closeAnimationMs = 140;
+export function placeComposer(anchor: Pick<DOMRect, 'top' | 'right' | 'bottom'>,
+  panel: Pick<DOMRect, 'width' | 'height'>, viewport: { width: number; height: number }): { left: number; top: number } {
+  const left = Math.min(viewport.width - panel.width - viewportMargin, Math.max(viewportMargin, anchor.right - panel.width));
+  const below = anchor.bottom + anchorGap, above = anchor.top - panel.height - anchorGap;
+  return { left: Math.max(viewportMargin, left), top: below + panel.height <= viewport.height - viewportMargin ? below : Math.max(viewportMargin, above) };
+}
 
 export class MediaComposer {
   private panel?: HTMLElement; private anchor?: HTMLElement; private resource?: MediaResource;
@@ -78,8 +84,8 @@ export class MediaComposer {
   }
   private position(): void {
     if (!this.panel || !this.anchor) return; const anchor = this.anchor.getBoundingClientRect(), panel = this.panel.getBoundingClientRect(), view = this.document.defaultView!;
-    const left = Math.min(view.innerWidth - panel.width - viewportMargin, Math.max(viewportMargin, anchor.right - panel.width)); const below = anchor.bottom + anchorGap, above = anchor.top - panel.height - anchorGap;
-    this.panel.style.left = `${left}px`; this.panel.style.top = `${below + panel.height <= view.innerHeight - viewportMargin ? below : Math.max(viewportMargin, above)}px`;
+    const placed = placeComposer(anchor, panel, { width: view.innerWidth, height: view.innerHeight });
+    this.panel.style.left = `${placed.left}px`; this.panel.style.top = `${placed.top}px`;
   }
   private status(message: string, error = false): void { const status = this.panel?.querySelector('[data-status]'); if (status) { status.textContent = message; status.classList.toggle('error', error); } }
   private busy(value: boolean): void { this.panel?.querySelectorAll<HTMLButtonElement>('button').forEach(button => { button.disabled = value; }); }
