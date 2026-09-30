@@ -23,7 +23,7 @@ export class AutoSendService {
   private state: AutoState = emptyAutoState();
   private loaded = false;
   private fault = false;
-  private preparing = false;
+  private readonly preparing = new Set<string>();
   private readonly filePreparations = new Map<string, { token: string; abort: AbortController }>();
   private fileUpload?: { id: string; itemId: string; abort: AbortController };
   private readyReceivers: string[] = [];
@@ -105,6 +105,7 @@ export class AutoSendService {
     try { await this.repository.save(state); }
     catch {
       this.fault = true; this.transport.wakeAt(undefined); this.transport.changed(undefined);
+      for (const waiter of this.manualWaiters) waiter();
       throw new AutoSendError('Couldn’t save task state. Retry the connection.');
     }
     this.state = state; this.fault = false;
@@ -113,6 +114,7 @@ export class AutoSendService {
     }
     if (this.fileUpload && !this.entries(state).some(entry => entry.id === this.fileUpload!.id && entry.status === 'queued' && entry.preparedItemId === this.fileUpload!.itemId)) this.fileUpload.abort.abort();
     this.transport.changed(this.snapshot()); this.schedule();
+    for (const waiter of this.manualWaiters) waiter();
   }
   private snapshot(): AutoSnapshot {
     const { acceptedRequests, ...visible } = this.state;
@@ -120,7 +122,11 @@ export class AutoSendService {
   }
   private entries(state = this.state): QueueEntry[] { return [...state.sends, ...state.tasks]; }
   private availableAt(entry: QueueEntry, state = this.state): number { return queueAvailableAt(entry, state); }
-  private ordered(state = this.state): QueueEntry[] { return orderedQueue(state, this.now()).filter(entry => entry.status === 'queued' && !entry.preparation); }
+  private ordered(state = this.state): QueueEntry[] {
+    const uploading = this.entries(state).some(entry => entry.source === 'files' && this.preparing.has(entry.id));
+    return orderedQueue(state, this.now()).filter(entry => entry.status === 'queued' && !entry.preparation &&
+      !this.preparing.has(entry.id) && !(uploading && entry.source === 'files'));
+  }
   private acceptManual(state: AutoState, receiver: string, request: Extract<AutoRequest, { type: 'auto:enqueue' }>, tabId?: number): void {
     if (state.sends.some(send => send.id === request.id) || state.acceptedRequests.some(entry => entry.id === request.id && entry.expiresAt > this.now())) return;
     const expiresAt = request.createdAt + sendQueueLimits.requestWindowMs;
@@ -131,7 +137,7 @@ export class AutoSendService {
   }
   private schedule(): void {
     const running = this.entries().find(task => task.execution);
-    const times = this.entries().filter(task => task.status === 'queued' && !task.preparation).map(task => this.availableAt(task));
+    const times = this.ordered().map(task => this.availableAt(task));
     const executionWake = running?.execution?.deadline;
     const workTimes = executionWake === undefined ? times : [executionWake];
     const deadlines = [...workTimes, ...this.state.acceptedRequests.map(request => request.expiresAt)];
@@ -140,6 +146,7 @@ export class AutoSendService {
   private notice(state: AutoState, entry: QueueEntry): void {
     state.notices.push({ id: crypto.randomUUID(), receiver: entry.receiver,
       label: manual(entry) ? entry.parameters.label : entry.command, message: 'Unconfirmed. Not repeated.' });
+    if (state.notices.length > autoSendLimits.maxNotices) state.notices.shift();
   }
   private cooldown(state: AutoState, entry: QueueEntry, now: number): void {
     state.nextAllowedAt = Math.max(state.nextAllowedAt, now + sendQueueLimits.userMs);
@@ -154,16 +161,20 @@ export class AutoSendService {
     task.retryCount = 0; delete task.execution; delete task.retryExecution; delete task.reason; delete task.failureCode;
     delete task.preparedItemId;
   }
-  private async items(task: AutoTask): Promise<{ id: string; value?: string }[]> {
+  private async items(task: AutoTask, defaultItems: { id: string; value: string }[] = []): Promise<{ id: string; value?: string }[]> {
     if (task.source === 'files') return this.files!.items();
     if (task.command === 'sendOrDelete') return [];
-    if (task.categoryId === 'default') return this.defaultImages?.items() ?? [];
+    if (task.categoryId === 'default') return defaultItems;
     const type = commands[task.command].type;
     const category = (await this.library.read()).categories.find(category => category.id === task.categoryId && category.type === type);
     if (category) task.categoryName = category.name;
     return category?.items ?? [];
   }
-  handle(tabId: number, receiver: string, request: AutoRequest): Promise<AutoSnapshot> {
+  async handle(tabId: number, receiver: string, request: AutoRequest): Promise<AutoSnapshot> {
+    await this.queue.run(() => this.load());
+    const needsDefault = ((request.type === 'auto:start' || request.type === 'auto:seek') && request.categoryId === 'default') ||
+      (request.type === 'auto:resume' && this.state.tasks.some(task => task.id === request.id && task.categoryId === 'default'));
+    const defaultItems = needsDefault ? await this.defaultImages?.items() ?? [] : [];
     return this.queue.run(async () => {
       await this.load();
       if (this.fault) {
@@ -196,7 +207,7 @@ export class AutoSendService {
           const task: AutoTask = { id: crypto.randomUUID(), receiver, command: request.command, tabId: request.source === 'files' ? tabId : undefined,
             source: request.source, parameters: request.parameters, categoryId: request.categoryId, categoryName: request.source === 'files' ? 'Local Upload' : request.categoryId === 'default' ? 'Default' : '',
             intervalSeconds: request.intervalSeconds, status: 'queued', dueAt: this.now(), orderIds: [], nextItemId: request.itemId, selectionRevision: 0 };
-          const items = await this.items(task);
+          const items = await this.items(task, defaultItems);
           if (task.command !== 'sendOrDelete' && !items.length) throw new AutoSendError('Choose a non-empty category.');
           task.orderIds = items.map(item => item.id);
           task.nextItemId = nextAutoItem(task, items)?.id;
@@ -208,7 +219,7 @@ export class AutoSendService {
           if (!task || task.receiver !== receiver || task.source !== request.source || task.categoryId !== request.categoryId || task.command === 'sendOrDelete' || task.status === 'stopping') {
             throw new AutoSendError('This selection does not belong to an available task.');
           }
-          const items = await this.items(task);
+          const items = await this.items(task, defaultItems);
           if (!items.some(item => item.id === request.itemId)) throw new AutoSendError('The selected item is no longer available. Choose another item.');
           task.nextItemId = task.highlightedItemId = request.itemId;
           task.orderIds = items.map(item => item.id); task.selectionRevision++; delete task.retryExecution;
@@ -232,16 +243,9 @@ export class AutoSendService {
           const task = this.entries(state).find(task => task.id === request.id);
           if (!task || task.status !== 'paused') return this.snapshot();
           if (task.reason === 'invalid') throw new AutoSendError('Cancel or stop this task, correct the command, then send again.');
-          if (task.source !== 'files') {
-            task.status = 'queued'; task.retryCount = 0; delete task.reason; delete task.failureCode; task.dueAt = this.now(); break;
-          }
-          const pages = await this.transport.pages();
-          const candidates = pages.filter(({ page }) => page.receiver === task.receiver && page.commands.some(command => command === (manual(task) ? task.parameters.key : task.command)));
-          const candidate = candidates.find(page => page.tabId === tabId) ?? candidates.find(page => page.tabId === task.tabId) ?? candidates[0];
-          if (!candidate) throw new AutoSendError('Open the recipient’s page before resuming.');
-          const items = manual(task) || task.retryExecution ? [] : await this.items(task);
+          const items = manual(task) || task.retryExecution ? [] : await this.items(task, defaultItems);
           if (!manual(task) && !task.retryExecution && task.command !== 'sendOrDelete' && !items.length) throw new AutoSendError('Choose a non-empty category. Stop this task to change its source.');
-          task.tabId = candidate.tabId; task.status = 'queued'; task.retryCount = 0; delete task.reason; delete task.failureCode; delete task.fileError; task.dueAt = this.now(); break;
+          task.status = 'queued'; task.retryCount = 0; delete task.reason; delete task.failureCode; delete task.fileError; task.dueAt = this.now(); break;
         }
         case 'auto:open': {
           const task = this.entries(state).find(task => task.id === request.id);
@@ -249,10 +253,20 @@ export class AutoSendService {
           return this.snapshot();
         }
         case 'auto:manual': state.nextAllowedAt = Math.max(state.nextAllowedAt, this.now() + autoSendLimits.minSeconds * 1000); break;
-        case 'auto:detach': this.detach(state, tabId); break;
       }
       await this.commit(state); return this.snapshot();
     });
+  }
+  async enqueueBatch(requests: { receiver: string; request: Extract<AutoRequest, { type: 'auto:enqueue' }> }[]): Promise<{ sent: number; failed: number }> {
+    const { completion } = await this.queue.run(async () => {
+      await this.load();
+      if (this.fault) throw new AutoSendError('Couldn’t save task state. Retry the connection.');
+      const state = structuredClone(this.state);
+      for (const { receiver, request } of requests) this.acceptManual(state, receiver, request);
+      await this.commit(state);
+      return { completion: this.waitManual(requests.map(({ request }) => request.id)) };
+    });
+    return completion;
   }
   enqueue(receiver: string, request: Extract<AutoRequest, { type: 'auto:enqueue' }>): Promise<AutoSnapshot> {
     return this.queue.run(async () => {
@@ -264,35 +278,20 @@ export class AutoSendService {
       return this.snapshot();
     });
   }
-  waitManual(ids: string[]): Promise<{ sent: number; failed: number }> {
+  private waitManual(ids: string[]): Promise<{ sent: number; failed: number }> {
+    for (const id of ids) this.manualOutcomes.set(id, 'failed');
     return new Promise(resolve => {
       const inspect = () => {
-        const outcomes = ids.map(id => this.manualOutcomes.get(id) ?? (this.state.sends.find(send => send.id === id)?.status === 'paused' ? 'failed' : undefined));
+        const sends = new Map(this.state.sends.map(send => [send.id, send]));
+        const outcomes = ids.map(id => {
+          const send = sends.get(id);
+          return this.fault ? 'failed' : send && send.status !== 'paused' ? undefined : this.manualOutcomes.get(id);
+        });
         if (outcomes.some(outcome => outcome === undefined)) return;
         this.manualWaiters.delete(inspect); for (const id of ids) this.manualOutcomes.delete(id);
         resolve({ sent: outcomes.filter(outcome => outcome === 'success').length, failed: outcomes.filter(outcome => outcome === 'failed').length });
       };
       this.manualWaiters.add(inspect); inspect();
-    });
-  }
-  private detach(state: AutoState, tabId: number): void {
-    for (const entry of this.entries(state).filter(entry => entry.source === 'files' && entry.tabId === tabId)) {
-      delete entry.preparation;
-      if (entry.execution) {
-        this.notice(state, entry);
-        this.cooldown(state, entry, this.now());
-        if (manual(entry)) state.sends = state.sends.filter(send => send !== entry);
-        else if (entry.status === 'stopping') state.tasks = state.tasks.filter(task => task !== entry);
-        else { this.advance(entry, this.now()); this.pause(entry, 'interrupted'); }
-      } else this.pause(entry, 'interrupted');
-    }
-  }
-  removeTab(tabId: number): Promise<void> {
-    return this.queue.run(async () => {
-      await this.load();
-      if (!this.entries().some(task => task.source === 'files' && task.tabId === tabId)) return;
-      const state = structuredClone(this.state); this.detach(state, tabId);
-      await this.commit(state);
     });
   }
   clearFiles(): Promise<void> {
@@ -364,7 +363,7 @@ export class AutoSendService {
   async tick(): Promise<void> {
     const candidate = await this.queue.run(async () => {
       await this.load();
-      if (this.fault || this.preparing) return;
+      if (this.fault) return;
       await this.libraryChanged();
       if (this.state.acceptedRequests.some(request => request.expiresAt <= this.now())) await this.commit(structuredClone(this.state));
       const state = structuredClone(this.state), now = this.now();
@@ -383,7 +382,7 @@ export class AutoSendService {
         if (!manual(task)) { task.orderIds = items.map(item => item.id); task.nextItemId = task.highlightedItemId = id; }
         if (task.preparedItemId !== id) { await this.prepareFile(state, task, id); return; }
       }
-      this.preparing = true;
+      this.preparing.add(task.id);
       return task;
     });
     if (!candidate) return;
@@ -391,6 +390,7 @@ export class AutoSendService {
     let items: { id: string; value?: string }[] = [], reason: PauseReason | undefined;
     let fileValue: string | undefined, fileError: string | undefined;
     try {
+      if (!manual(candidate) && candidate.categoryId === 'default') items = await this.defaultImages?.items() ?? [];
       if (candidate.source === 'files') {
         const abort = new AbortController();
         const allowed = await this.queue.run(async () => {
@@ -403,14 +403,15 @@ export class AutoSendService {
         catch (error) { reason = 'file'; fileError = error instanceof Error ? error.message : 'Image upload failed.'; }
         finally { this.fileUpload = undefined; }
       }
-    } catch { reason = 'storage'; }
+    } catch { reason = 'failed'; }
     await this.queue.run(async () => {
-      this.preparing = false;
+      this.preparing.delete(candidate.id);
       if (this.fault) return;
       await this.libraryChanged();
       const state = structuredClone(this.state), task = this.entries(state).find(task => task.id === candidate.id);
       if (!task || task.status !== 'queued' ||
         this.availableAt(task, state) > this.now()) { this.schedule(); return; }
+      if (this.entries(state).some(entry => entry.execution)) { this.schedule(); return; }
       // A choice made during preparation needs a fresh view of its source.
       if (!manual(task) && !manual(candidate) && task.selectionRevision !== candidate.selectionRevision) { this.schedule(); return; }
       if (reason) {
@@ -429,7 +430,7 @@ export class AutoSendService {
         await this.dispatch(state, task); return;
       }
       // Re-read after the probe while library writes and dispatch share the same queue.
-      items = await this.items(task);
+      items = await this.items(task, items as { id: string; value: string }[]);
       if (task.retryExecution && task.command !== 'sendOrDelete' && !items.some(item => item.id === task.retryExecution!.itemId)) {
         delete task.retryExecution; task.retryCount = 0; delete task.failureCode;
       }
@@ -473,7 +474,7 @@ export class AutoSendService {
       if (manual(task)) state.sends = state.sends.filter(entry => entry !== task);
       else state.tasks = state.tasks.filter(entry => entry !== task);
     };
-    if (manual(task) && (outcome.status === 'success' || outcome.reason === 'unknown')) this.manualOutcomes.set(task.id, outcome.status === 'success' ? 'success' : 'failed');
+    if (manual(task) && this.manualOutcomes.has(task.id) && (outcome.status === 'success' || outcome.reason === 'unknown')) this.manualOutcomes.set(task.id, outcome.status === 'success' ? 'success' : 'failed');
     if (task.status === 'stopping') remove();
     else if (task.execution?.sourceInvalidated) {
       if (outcome.status === 'paused' && outcome.reason === 'unknown') this.notice(state, task);
@@ -499,6 +500,5 @@ export class AutoSendService {
     if (this.fault) for (const candidate of this.entries(state)) this.pause(candidate, 'storage');
     await this.reconcileSources(state);
     await this.commit(state);
-    for (const waiter of this.manualWaiters) waiter();
   }
 }

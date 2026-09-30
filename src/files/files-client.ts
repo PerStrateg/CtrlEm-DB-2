@@ -44,7 +44,7 @@ export class FilesClient {
       if (signal?.aborted) abort(); else port.postMessage({ type: 'get', id, part });
     });
   }
-  async put(blob: Blob, header: { id: string; generation: string; part: FilePart; name?: string; path?: string; token?: string }): Promise<void> {
+  async put(blob: Blob, header: { id: string; generation: string; part: FilePart; name?: string; path?: string }): Promise<void> {
     const port = chrome.runtime.connect({ name: filesPort });
     let pending: { resolve(): void; reject(error: Error): void } | undefined;
     let closed = false;

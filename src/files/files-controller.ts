@@ -26,7 +26,6 @@ export class FilesController {
   private disposed = false;
   private mount?: ResultsMount;
   private target?: HTMLElement;
-  private readonly processor: HTMLIFrameElement;
   private readonly cleanups: (() => void)[] = [];
   private galleryPending = false;
   private refreshTimer?: ReturnType<typeof setTimeout>;
@@ -43,11 +42,8 @@ export class FilesController {
       interval: value => { void this.preference({ interval: value }); },
       send: () => { void this.send(); }, auto: () => { void this.toggleAuto(); },
     });
-    this.processor = page.document.createElement('iframe'); this.processor.hidden = true;
-    this.processor.title = 'CtrlEm image processor'; this.processor.src = chrome.runtime.getURL('files-processor.html');
   }
   start(): void {
-    this.page.document.body.append(this.processor);
     this.cleanups.push(this.results.subscribe(view => {
       this.open = view === 'files';
       if (this.open) { this.reconcile(); if (this.target) this.page.alignResults(this.target); void this.refreshGallery(); }
@@ -195,6 +191,6 @@ export class FilesController {
   dispose(): void {
     this.disposed = true; this.importGeneration++;
     for (const cleanup of this.cleanups) cleanup();
-    this.mount?.dispose(); this.page.removeFilesLauncher(this.ui.launcher); this.ui.dispose(); this.processor.remove();
+    this.mount?.dispose(); this.page.removeFilesLauncher(this.ui.launcher); this.ui.dispose();
   }
 }

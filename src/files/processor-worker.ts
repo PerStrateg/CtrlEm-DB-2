@@ -26,6 +26,18 @@ async function thumbnail(blob: Blob): Promise<Blob> {
   });
 }
 
+/** One reduction step. Only scale and palette shrink a lossless format; quality only bites in lossy ones. */
+interface Reduction { scale: number; quality: number; colors: number }
+
+/** Least reduction first, and never a full-size encode whose quality setting cannot change the output. */
+function reductions(qualityMatters: boolean): Reduction[] {
+  const palette = filesPolicy.paletteSteps.map(colors => ({ scale: 1, quality: 100, colors }));
+  const quality = qualityMatters ? filesPolicy.qualitySteps.map(value => ({ scale: 1, quality: value, colors: 256 })) : [];
+  const resize = Array.from({ length: filesPolicy.maxResizeSteps }, (_, index) =>
+    ({ scale: filesPolicy.resizeFactor ** (index + 1), quality: 100, colors: 64 }));
+  return [...palette, ...quality, ...resize];
+}
+
 export async function prepareImage(blob: Blob, progress?: (value: ImagePreparationProgress) => void): Promise<Blob> {
   if (['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(blob.type) && blob.size <= filesPolicy.maxUploadBytes) return blob;
   progress?.({ phase: 'decoding' });
@@ -38,13 +50,9 @@ export async function prepareImage(blob: Blob, progress?: (value: ImagePreparati
     const mime = format === MagickFormat.Gif ? 'image/gif' : format === MagickFormat.Jpeg ? 'image/jpeg' : format === MagickFormat.Png ? 'image/png' : 'image/webp';
     if (animated) { progress?.({ phase: 'frames' }); images.coalesce(); }
     for (const image of images) { image.autoOrient(); image.strip(); }
-    // GIF quality does not reduce its size. Only try a new palette after the lossless pass.
-    const reductionSteps = gif ? filesPolicy.paletteSteps.filter(colors => colors < 256)
-      .map(colors => ({ scale: 1, quality: 100, colors }))
-      : filesPolicy.qualitySteps.map((quality, i) => ({ scale: 1, quality, colors: filesPolicy.paletteSteps[i]! }));
-    const attempts = [{ scale: 1, quality: 100, colors: 256 }, ...reductionSteps,
-      ...Array.from({ length: filesPolicy.maxResizeSteps }, (_, i) => ({ scale: filesPolicy.resizeFactor ** (i + 1), quality: 65, colors: 64 }))];
-    for (const [index, attempt] of attempts.entries()) {
+    // A lossless encode ignores quality, so paying for a second full-size pass would repeat identical bytes.
+    const qualityMatters = format === MagickFormat.Jpeg || format === MagickFormat.WebP;
+    for (const [index, attempt] of reductions(qualityMatters).entries()) {
       const pass = index + 1;
       const result = images.clone(copy => {
         if (attempt.scale < 1) progress?.({ phase: 'resizing', attempt: pass });
@@ -56,7 +64,7 @@ export async function prepareImage(blob: Blob, progress?: (value: ImagePreparati
           }
         }
         if (attempt.scale < 1) copy.resetPage();
-        if ((gif || format === MagickFormat.Png) && attempt.colors < 256) {
+        if (format === MagickFormat.Png || attempt.colors < 256) {
           progress?.({ phase: 'palette', attempt: pass });
           const quantize = new QuantizeSettings(); quantize.colors = attempt.colors; copy.quantize(quantize);
         }

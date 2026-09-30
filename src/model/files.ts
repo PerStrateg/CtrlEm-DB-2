@@ -1,8 +1,11 @@
 export const filesPolicy = {
   maxUploadBytes: 4.5 * 1024 * 1024, capacity: 20, thumbnailSize: 256,
   cardSize: 128, gap: 10, overscanRows: 2, chunkBytes: 512 * 1024,
-  processTimeoutMs: 5 * 60_000, progressIntervalMs: 100, qualitySteps: [90, 80, 65], paletteSteps: [256, 128, 64],
+  processTimeoutMs: 5 * 60_000, progressIntervalMs: 100,
+  // Single-frame sources skip the codec when they already fit; nothing else runs before the first pass.
+  qualitySteps: [90, 80, 65], paletteSteps: [256, 128, 64],
   resizeFactor: 0.8, maxResizeSteps: 12,
+  galleryReadMs: 15_000, uploadMs: 120_000,
 };
 export const filesAccept = '.jpg,.jpeg,.png,.gif,.webp,.bmp,.avif,.tif,.tiff';
 export type FilePart = 'original' | 'preview' | 'prepared';

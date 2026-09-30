@@ -38,6 +38,11 @@ export function mediaKindFromUrl(url: URL): MediaKind | undefined {
   return (Object.entries(extensions) as [MediaKind, RegExp][]).find(([, extension]) => extension.test(url.pathname))?.[0];
 }
 
+/** Full href is the identity: query carries distinct files, so ids must not stop at the pathname. */
+export function mediaResourceId(kind: MediaKind, href: string): string {
+  return `${kind}:${href}`;
+}
+
 export function mediaResource(kind: MediaKind, url: URL): MediaResource {
-  return { id: `${kind}:${url.origin}${url.pathname}`, kind, url: url.href };
+  return { id: mediaResourceId(kind, url.href), kind, url: url.href };
 }

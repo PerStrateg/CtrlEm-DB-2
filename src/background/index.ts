@@ -1,3 +1,4 @@
+import { notifyLibraryChanged } from './library-events';
 import { registerRedgifs } from './redgifs-runtime';
 import { registerRedgifsAdblock } from './redgifs-adblock';
 import { receiverFromUrl } from '../model/send-command';
@@ -23,12 +24,13 @@ import { registerMediaSend } from './media-send-runtime';
 import { registerMediaSettings } from './media-settings-runtime';
 import { registerRemoteMediaLibrary } from './remote-media-library-runtime';
 import { remoteMediaUploadPort } from '../shared/media-library-protocol';
+import { imageProcessorPort } from '../files/image-processor-protocol';
 
 const libraryQueue = new WriteQueue();
 const files = createFilesService();
 const scheduler = registerAutoSend(libraryQueue, files);
 const mediaSettings = registerMediaSettings();
-registerMediaSend(scheduler, mediaSettings.settings, mediaSettings.composer);
+registerMediaSend(scheduler, mediaSettings.settings);
 registerFiles(files, () => scheduler.clearFiles(), id => scheduler.removeFile(id, () => files.remove(id)));
 registerImageCache();
 registerRedgifs();
@@ -49,7 +51,7 @@ chrome.permissions.onAdded.addListener(accessChanged);
 chrome.permissions.onRemoved.addListener(accessChanged);
 
 chrome.runtime.onConnect.addListener(port => {
-  if ([imageCachePort, filesPort, remoteMediaUploadPort].includes(port.name)) return;
+  if ([imageCachePort, filesPort, remoteMediaUploadPort, imageProcessorPort].includes(port.name)) return;
   if (port.name !== uploadPortName || !port.sender || authorizedTab(port.sender, chrome.runtime.id) === undefined) { port.disconnect(); return; }
   const upload = new UploadSession(credentials, uploadRequest, () => chrome.permissions.contains(catboxAccess));
   let connected = true;
@@ -125,22 +127,13 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
   }
   void (async () => {
     try {
-      const pageReceiver = receiverFromUrl(sender.url!);
-      // Keep existing profile selection keys; groups have their own namespace.
-      const receiver = pageReceiver.startsWith('group:') ? pageReceiver : new URL(sender.url!).pathname.split('/')[2]!;
+      const receiver = receiverFromUrl(sender.url!);
       const value = await service.handle(tabId, message, receiver);
       respond({ ok: true, value });
       if (['library:change', 'library:capture', 'library:import', 'library:add-upload'].includes((message as { type: string }).type)) {
         const result = value as Pick<ChangeResult, 'library'> & { status: string };
         if (result.status === 'saved') {
-          try {
-            const tabs = await chrome.tabs.query({ url: ['https://ctrlem.com/u/*', 'https://ctrlem.com/groups/*'] });
-            await Promise.all(tabs.map(async tab => {
-              if (tab.id === undefined) return;
-              // Tabs can close or have no receiver between query and delivery.
-              await chrome.tabs.sendMessage(tab.id, { type: 'library:changed', library: result.library }).catch(() => undefined);
-            }));
-          } catch { console.warn('[CtrlEm DB] Could not notify other tabs.'); }
+          await notifyLibraryChanged(result.library);
         }
       }
     } catch (error) {

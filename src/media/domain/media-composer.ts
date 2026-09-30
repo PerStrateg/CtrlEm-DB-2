@@ -8,9 +8,8 @@ export const mediaComposerPreferencesSchema = z.object({
 }).strict().refine(value => new Set(value.selectedRecipients.map(item => item.receiver)).size === value.selectedRecipients.length);
 export type MediaComposerPreferences = z.infer<typeof mediaComposerPreferencesSchema>;
 
-export const defaultMediaComposerPreferences = (): MediaComposerPreferences => ({
-  selectedRecipients: [{ receiver: 'group:912b55df-0678-46bc-a5c3-b0d39a803740', kind: 'group', label: 'test' }],
-});
+/** No recipient ships as default: the first send must be an explicit human choice. */
+export const defaultMediaComposerPreferences = (): MediaComposerPreferences => ({ selectedRecipients: [] });
 
 export const recipientSearchSchema = z.object({
   kind: z.enum(['group', 'user']), query: z.string().max(120),

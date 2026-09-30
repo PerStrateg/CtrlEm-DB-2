@@ -2,7 +2,6 @@ import { ConfirmButton } from './confirm-button';
 import { typeLabels } from '../model/library';
 import { createInfoButton } from './info-tip';
 import type { ImportPlan } from '../model/library-file';
-import type { ImportReview } from '../model/library-import';
 
 interface TransferActions {
   export(): void;
@@ -36,7 +35,7 @@ export class LibraryTransferView {
       <div class="ctrlem-db-transfer-panel" hidden></div>
       </fieldset><div class="ctrlem-db-actions"><button type="button" data-transfer="log">Export session log</button></div><p role="status"></p>`;
     this.controls = this.element.querySelector('fieldset')!;
-    this.element.querySelector('[data-transfer=import]')!.after(createInfoButton(document, 'About imports', 'Supports userscript versions 1–2 and CtrlEm DB backups. Choose a file, review the preview, then click Sure? to complete the import.'));
+    this.element.querySelector('[data-transfer=import]')!.after(createInfoButton(document, 'About imports', 'Choose a CtrlEm DB version 3 export, review the preview, then click Sure? to complete the import.'));
     this.panel = this.element.querySelector('.ctrlem-db-transfer-panel')!;
     this.status = this.element.querySelector('[role=status]')!;
     this.logButton = this.element.querySelector('[data-transfer=log]')!;
@@ -85,29 +84,18 @@ export class LibraryTransferView {
   private paragraph(text: string): HTMLParagraphElement {
     const p = this.document.createElement('p'); p.textContent = text; return p;
   }
-  preview(plan: ImportPlan, drafts: boolean, review?: ImportReview, defaults = false): void {
+  preview(plan: ImportPlan, drafts: boolean, defaults = false): void {
     this.panel.replaceChildren(this.paragraph(`${plan.categories.length} categories, ${plan.categories.reduce((count, category) => count + category.items.length, 0)} items`));
     const list = this.document.createElement('ul');
     for (const category of plan.categories) {
       const li = this.document.createElement('li'); li.textContent = `${typeLabels[category.type]}: ${category.name} (${category.items.length})`; list.append(li);
     }
     this.panel.append(list);
-    if (review?.legacy) {
-      this.panel.append(this.paragraph(`Userscript import: ${review.originalItems} original entries. Settings are not imported.`));
-      for (const warning of review.warnings) this.panel.append(this.paragraph(warning));
-      if (review.exclusions.length) {
-        this.panel.append(this.paragraph(`${review.exclusions.length} entries will be skipped:`));
-        const exclusions = this.document.createElement('ul');
-        for (const value of review.exclusions) { const item = this.document.createElement('li'); item.textContent = value; exclusions.append(item); }
-        this.panel.append(exclusions);
-      }
-    }
     for (const warning of plan.warnings) this.panel.append(this.paragraph(warning));
     const info = [
       defaults ? 'Restore the bundled default library. Export DB first to keep a backup.' : 'Import this file.',
       'This replaces all saved categories. Other extension settings are kept.',
       drafts ? 'Unsaved drafts in this tab will be discarded. Drafts in other tabs will remain as conflicts.' : '',
-      review?.exclusions.length ? `Skip ${review.exclusions.length} entries listed in the preview.` : '',
     ].filter(Boolean).join(' ');
     this.resetConfirmations();
     const confirmation = this.confirmations.get(defaults ? 'defaults' : 'import')!;

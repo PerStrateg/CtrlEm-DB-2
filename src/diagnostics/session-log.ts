@@ -29,7 +29,7 @@ const detailsSchema = z.object({
   failureCode: z.enum(['rateLimit', 'required', 'url', 'textLength', 'count', 'session', 'rejected']).optional(),
   request: z.enum(['library:load', 'library:change', 'library:capture', 'library:import', 'library:add-upload', 'library:session',
     'picker:load', 'picker:select', 'auto:snapshot', 'auto:start', 'auto:stop', 'auto:seek', 'auto:stop-all', 'auto:resume',
-    'auto:open', 'auto:manual', 'auto:enqueue', 'auto:dismiss', 'auto:detach',
+    'auto:open', 'auto:manual', 'auto:enqueue', 'auto:dismiss',
     'files:list', 'files:gallery', 'files:progress', 'files:clear', 'files:remove', 'files:preferences']).optional(),
   observation: z.enum(['observed', 'not-observed', 'unavailable', 'ambiguous']).optional(),
   hostPermission: z.enum(['granted', 'missing', 'unknown']).optional(),

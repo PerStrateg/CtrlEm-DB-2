@@ -1,6 +1,5 @@
 import { exportLibrary, planImport } from '../model/library-file';
 import { LibraryImportError, readLibraryImport } from '../model/library-import';
-import type { ImportReview } from '../model/library-import';
 import type { ImportPlan, LibraryFile } from '../model/library-file';
 import type { ContentType, Library } from '../model/library';
 import type { LibraryClient, TransferClient } from '../shared/library-protocol';
@@ -14,7 +13,7 @@ export interface TransferEditor {
   lockTransfer(locked: boolean): Promise<void>;
   imported(library: Library, categoryIds: string[], replace: boolean): void;
 }
-interface PendingImport { file: LibraryFile; plan: ImportPlan; discardDrafts: boolean; review?: ImportReview; defaults: boolean }
+interface PendingImport { file: LibraryFile; plan: ImportPlan; discardDrafts: boolean; defaults: boolean }
 export class TransferController {
   readonly view: LibraryTransferView;
   private pending?: PendingImport;
@@ -79,9 +78,8 @@ export class TransferController {
   private async readFile(file: File): Promise<void> {
     await this.run(async () => {
       this.pending = undefined; this.view.close(false);
-      const parsed = readLibraryImport(JSON.parse(await file.text()));
-      await this.prepare(parsed.file, false, parsed.review);
-    }, 'Couldn’t read import. Choose a valid CtrlEm DB export (version 3 or 1) or userscript export (version 1 or 2) and try again.');
+      await this.prepare(readLibraryImport(JSON.parse(await file.text())), false);
+    }, 'Couldn’t read import. Choose a valid CtrlEm DB version 3 export and try again.');
   }
   private async restoreDefaults(): Promise<void> {
     await this.run(async () => {
@@ -89,16 +87,16 @@ export class TransferController {
       await this.prepare(defaultLibraryFile, true);
     }, 'Couldn’t load defaults. Retry Restore Defaults.');
   }
-  private async prepare(file: LibraryFile, defaults: boolean, review?: ImportReview): Promise<void> {
+  private async prepare(file: LibraryFile, defaults: boolean): Promise<void> {
     const loaded = await this.client.load();
     if (this.disposed) return;
-    this.pending = { file, defaults, review, plan: planImport(loaded.library, file, 'replace'),
+    this.pending = { file, defaults, plan: planImport(loaded.library, file, 'replace'),
       discardDrafts: this.editor.transferState().hasDrafts };
     this.showPlan();
   }
   private showPlan(): void {
     const pending = this.pending!;
-    this.view.preview(pending.plan, pending.discardDrafts, pending.review, pending.defaults);
+    this.view.preview(pending.plan, pending.discardDrafts, pending.defaults);
   }
   private async confirm(): Promise<void> {
     await this.run(async () => {

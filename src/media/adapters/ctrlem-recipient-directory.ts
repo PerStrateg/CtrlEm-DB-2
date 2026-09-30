@@ -2,6 +2,8 @@ import { z } from '../../shared/validation';
 import type { MediaRecipient } from '../domain/media-settings';
 import type { RecipientDirectoryPort } from '../ports/recipient-directory-port';
 
+const recipientApiLimits = { timeoutMs: 15_000, searchResults: 10 } as const;
+
 const groupSchema = z.object({
   id: z.string().min(1), name: z.string().min(1), isMember: z.boolean(), isOwner: z.boolean(),
 }).loose();
@@ -47,7 +49,7 @@ export class CtrlemRecipientDirectoryAdapter implements RecipientDirectoryPort {
   private async groupPage(page: number, query: string) {
     const request = this.request;
     const search = query ? `&q=${encodeURIComponent(query)}` : '';
-    const response = await request(`https://ctrlem.com/api/groups?page=${page}&myGroups=true${search}`, requestInit);
+    const response = await request(`https://ctrlem.com/api/groups?page=${page}&myGroups=true${search}`, requestInit());
     if (!response.ok) throw new ResponseError(response.status);
     return groupsPageSchema.parse(await response.json());
   }
@@ -56,7 +58,7 @@ export class CtrlemRecipientDirectoryAdapter implements RecipientDirectoryPort {
     this.report({ event: 'start', source: 'friends' });
     try {
       const request = this.request;
-      const response = await request('https://ctrlem.com/api/friends', requestInit);
+      const response = await request('https://ctrlem.com/api/friends', requestInit());
       if (!response.ok) throw new ResponseError(response.status);
       const friends = z.array(friendSchema).parse(await response.json());
       const users = await Promise.all(friends.map(friend => this.findUser(friend.user.id, friend.user.username)));
@@ -72,8 +74,9 @@ export class CtrlemRecipientDirectoryAdapter implements RecipientDirectoryPort {
 
   private async searchUsers(query: string): Promise<MediaRecipient[]> {
     this.report({ event: 'start', source: 'friends' });
+    const request = this.request;
     try {
-      const response = await this.request(`https://ctrlem.com/api/users/search?q=${encodeURIComponent(query)}&limit=10`, requestInit);
+      const response = await request(`https://ctrlem.com/api/users/search?q=${encodeURIComponent(query)}&limit=${recipientApiLimits.searchResults}`, requestInit());
       if (!response.ok) throw new ResponseError(response.status);
       const recipients = z.array(userSchema).parse(await response.json()).map(user => ({
         receiver: user.controlCode.toLowerCase(), kind: 'user' as const, label: user.username,
@@ -87,12 +90,12 @@ export class CtrlemRecipientDirectoryAdapter implements RecipientDirectoryPort {
 
   private async findUser(id: string, username: string) {
     const request = this.request;
-    const response = await request(`https://ctrlem.com/api/users/search?q=${encodeURIComponent(username)}&limit=10`, requestInit);
+    const response = await request(`https://ctrlem.com/api/users/search?q=${encodeURIComponent(username)}&limit=${recipientApiLimits.searchResults}`, requestInit());
     if (!response.ok) throw new ResponseError(response.status);
     return z.array(userSchema).parse(await response.json()).find(user => user.id === id);
   }
 }
 
-const requestInit: RequestInit = { credentials: 'include', cache: 'no-store' };
+const requestInit = (): RequestInit => ({ credentials: 'include', cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(recipientApiLimits.timeoutMs) });
 class ResponseError extends Error { constructor(readonly status: number) { super(`CtrlEm request failed: ${status}`); } }
 const statusOf = (error: unknown): number | undefined => error instanceof ResponseError ? error.status : undefined;

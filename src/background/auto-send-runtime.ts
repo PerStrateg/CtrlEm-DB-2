@@ -74,10 +74,6 @@ export function registerAutoSend(queue: WriteQueue, files?: FilesSource): AutoSe
     return true;
   });
   chrome.alarms.onAlarm.addListener(alarm => { if (alarm.name === alarmName) void scheduler.tick().catch(failed); });
-  chrome.tabs.onRemoved.addListener(tabId => { void scheduler.removeTab(tabId).catch(failed); });
-  chrome.tabs.onUpdated.addListener((tabId, change) => {
-    if (change.status === 'loading' || change.url) void scheduler.removeTab(tabId).catch(failed);
-  });
   // Session storage is cleared on extension reload/browser restart, not on worker sleep.
   void scheduler.tick().catch(failed);
   return scheduler;

@@ -25,7 +25,6 @@ export const autoRequestSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('auto:enqueue'), id: z.string().uuid(), createdAt: z.number().int().nonnegative(), parameters: sendCommandSchema,
     source: z.literal('files').optional(), fileId: z.string().optional() }).strict(),
   z.object({ type: z.literal('auto:dismiss'), id: z.string().uuid() }).strict(),
-  z.object({ type: z.literal('auto:detach') }).strict(),
 ]);
 export type AutoRequest = z.infer<typeof autoRequestSchema>;
 export class AutoConnectionError extends Error {}

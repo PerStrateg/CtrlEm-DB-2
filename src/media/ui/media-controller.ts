@@ -1,41 +1,48 @@
-import { DiscordMediaSource } from '../adapters/discord-media-source';
-import { HtmlMediaSource } from '../adapters/html-media-source';
+import type { MediaAttachmentSourcePort, MediaSourcePort } from '../ports/media-source-port';
 import type { MediaSendPort } from '../ports/media-send-port';
-import { MediaActionBar } from './media-action-bar';
-import { MediaComposer } from './media-composer';
 import type { MediaSettingsPort } from '../ports/media-settings-port';
 import type { MediaLibraryPort } from '../ports/media-library-port';
+import type { MediaResource } from '../domain/media-resource';
+import { MediaActionBar } from './media-action-bar';
+import { MediaComposer } from './media-composer';
+
+interface MountedMedia {
+  key: string;
+  root: HTMLElement;
+  element: HTMLElement;
+  bar: MediaActionBar;
+}
 
 export class MediaController {
-  private readonly discord = new DiscordMediaSource();
-  private readonly generic = new HtmlMediaSource();
-  private readonly persistent = new Map<string, MediaActionBar>();
+  private readonly mounted = new Map<string, MountedMedia>();
   private hover?: MediaActionBar;
   private observer?: MutationObserver;
   private scheduled = false;
+  private readonly pendingRoots = new Set<HTMLElement>();
   private readonly composer: MediaComposer;
 
   constructor(private readonly document: Document, private readonly sender: MediaSendPort,
-    settings: MediaSettingsPort, library: MediaLibraryPort, showWallpaper: boolean) {
+    settings: MediaSettingsPort, library: MediaLibraryPort, showWallpaper: boolean,
+    private readonly attachments: MediaAttachmentSourcePort, private readonly generic: MediaSourcePort) {
     this.composer = new MediaComposer(document, settings, sender, library, showWallpaper);
   }
 
   start(): void {
-    if (this.discord.matches(this.document)) {
-      this.reconcileDiscord();
-      this.observer = new this.document.defaultView!.MutationObserver(() => this.scheduleDiscord());
-      this.observer.observe(this.document.body, { childList: true, subtree: true });
+    if (!this.attachments.appliesTo(this.document)) {
+      this.document.addEventListener('pointerover', this.hoverMedia, true);
+      this.document.addEventListener('focusin', this.hoverMedia, true);
+      this.document.defaultView!.addEventListener('scroll', this.hideHover, true);
       return;
     }
-    this.document.addEventListener('pointerover', this.hoverMedia, true);
-    this.document.addEventListener('focusin', this.hoverMedia, true);
-    this.document.defaultView!.addEventListener('scroll', this.hideHover, true);
+    for (const root of this.attachments.roots(this.document)) this.mount(root);
+    this.observer = new this.document.defaultView!.MutationObserver(records => this.schedule(records));
+    this.observer.observe(this.document.body, { childList: true, subtree: true });
   }
 
   private readonly hoverMedia = (event: Event) => {
     if (!(event.target instanceof this.document.defaultView!.Element) || this.hover?.element.contains(event.target)) return;
     const target = this.generic.resolve(event.target);
-    if (!target || !this.hover) return this.hideHover();
+    if (!target) return this.hideHover();
     if (!this.hover || this.hover.element.dataset.kind !== target.resource.kind) {
       this.hover?.remove();
       this.hover = new MediaActionBar(this.document, target.resource, this.openComposer);
@@ -50,26 +57,53 @@ export class MediaController {
   };
   private readonly hideHover = () => this.hover?.element.remove();
 
-  private scheduleDiscord(): void {
+  private schedule(records: MutationRecord[]): void {
+    for (const root of this.attachments.rootsFor(records)) this.pendingRoots.add(root);
     if (this.scheduled) return;
     this.scheduled = true;
-    this.document.defaultView!.requestAnimationFrame(() => { this.scheduled = false; this.reconcileDiscord(); });
+    this.document.defaultView!.requestAnimationFrame(() => {
+      this.scheduled = false;
+      const roots = [...this.pendingRoots]; this.pendingRoots.clear();
+      this.reconcileRoots(roots);
+    });
   }
 
-  reconcileDiscord(): void {
+  /** Reconciles only the attachment roots that changed, plus roots that lost their bar with the frame. */
+  reconcile(records: MutationRecord[]): void {
+    this.reconcileRoots(this.attachments.rootsFor(records));
+  }
+  private reconcileRoots(changed: HTMLElement[]): void {
+    const roots = new Set(changed);
+    for (const entry of this.mounted.values()) if (!entry.bar.element.isConnected) roots.add(entry.root);
+    for (const root of roots) this.mount(root);
+  }
+
+  private mount(root: HTMLElement): void {
     const found = new Set<string>();
-    for (const target of this.discord.scan(this.document)) {
-      found.add(target.resource.id);
-      let bar = this.persistent.get(target.resource.id);
-      if (!bar) { bar = new MediaActionBar(this.document, target.resource, this.openComposer); this.persistent.set(target.resource.id, bar); }
+    for (const target of root.isConnected ? this.attachments.targetsIn(root) : []) {
+      found.add(target.key);
+      const current = this.mounted.get(target.key);
+      if (current?.element !== target.element) this.detach(current);
+      const bar = current?.bar ?? new MediaActionBar(this.document, target.resource, this.openComposer);
       bar.set(target.resource);
       target.element.classList.add('ctrlem-media-host');
       if (bar.element.parentElement !== target.element) {
-        const previous = bar.element.parentElement; target.element.append(bar.element);
+        const previous = bar.element.parentElement;
+        target.element.append(bar.element);
         if (previous && !previous.querySelector('.ctrlem-media-actions')) previous.classList.remove('ctrlem-media-host');
       }
+      this.mounted.set(target.key, { key: target.key, root, element: target.element, bar });
     }
-    for (const [id, bar] of this.persistent) if (!found.has(id)) { bar.remove(); this.persistent.delete(id); }
+    for (const entry of this.mounted.values()) {
+      if (entry.root !== root || found.has(entry.key)) continue;
+      this.detach(entry); this.mounted.delete(entry.key);
+    }
+  }
+
+  private detach(entry: MountedMedia | undefined): void {
+    if (!entry) return;
+    entry.element.classList.remove('ctrlem-media-host');
+    entry.bar.remove();
   }
 
   dispose(): void {
@@ -77,7 +111,11 @@ export class MediaController {
     this.document.removeEventListener('pointerover', this.hoverMedia, true);
     this.document.removeEventListener('focusin', this.hoverMedia, true);
     this.document.defaultView!.removeEventListener('scroll', this.hideHover, true);
-    this.composer.dispose(); this.hover?.remove(); for (const bar of this.persistent.values()) bar.remove(); this.persistent.clear();
+    this.composer.dispose();
+    this.hover?.remove();
+    for (const entry of this.mounted.values()) this.detach(entry);
+    this.mounted.clear();
   }
-  private readonly openComposer = (resource: import('../domain/media-resource').MediaResource, anchor: HTMLElement) => { void this.composer.open(resource, anchor); };
+
+  private readonly openComposer = (resource: MediaResource, anchor: HTMLElement) => { void this.composer.open(resource, anchor); };
 }

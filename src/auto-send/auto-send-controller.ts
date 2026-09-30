@@ -47,7 +47,7 @@ export class AutoSendController {
     }), this.pickers.subscribeItemChoice(choice => this.selected(choice)),
     this.fields.observe(() => this.reconcile()));
     const window = this.page.document.defaultView!;
-    const detached = () => { void this.client.request({ type: 'auto:detach' }).catch(() => undefined); this.page.dispose(); };
+    const detached = () => { this.page.dispose(); };
     const restored = (event: PageTransitionEvent) => { if (event.persisted) void this.act({ type: 'auto:snapshot' }); };
     window.addEventListener('pagehide', detached); window.addEventListener('pageshow', restored);
     const timer = window.setInterval(() => this.reconcile(), 1000);
@@ -123,7 +123,7 @@ export class AutoSendController {
     if (this.disposed) return;
     const receiver = this.page.receiver();
     if (receiver !== this.receiver) {
-      this.receiver = receiver; this.page.dispose(); void this.act({ type: 'auto:detach' });
+      this.receiver = receiver; this.page.dispose(); void this.act({ type: 'auto:snapshot' });
     }
     const state = this.page.state();
     for (const key of state.commands) {
@@ -156,7 +156,7 @@ export class AutoSendController {
   }
   dispose(): void {
     this.intervals?.dispose();
-    void this.client.request({ type: 'auto:detach' }).catch(() => undefined);
+
     this.disposed = true; for (const cleanup of this.cleanups) cleanup(); this.page.dispose(); this.page.restoreLayout();
     for (const control of this.controls.values()) control.element.remove(); this.panel.element.remove();
   }

@@ -4,7 +4,7 @@ import { sendQueueLimits } from './send-command';
 
 export const autoCommandKeys = [...commandKeys, 'sendOrDelete'] as const;
 export type AutoCommandKey = typeof autoCommandKeys[number];
-export const autoSendLimits = { defaultSeconds: 3, minSeconds: 3, maxSeconds: 3600, resultTimeoutMs: 15_000, probeTimeoutMs: 2_000 };
+export const autoSendLimits = { defaultSeconds: 3, minSeconds: 3, maxSeconds: 3600, resultTimeoutMs: 15_000, probeTimeoutMs: 2_000, maxNotices: 100 };
 export const autoCommandLabel = (key: AutoCommandKey): string => key === 'sendOrDelete' ? 'Send or Delete' : commands[key].label;
 export const pauseReasons = {
   unavailable: 'Page or command unavailable. Open the page, then Resume.',
