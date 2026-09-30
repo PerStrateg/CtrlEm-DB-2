@@ -22,6 +22,7 @@ import { filesPort } from '../shared/files-protocol';
 import { registerMediaSend } from './media-send-runtime';
 import { registerMediaSettings } from './media-settings-runtime';
 import { registerRemoteMediaLibrary } from './remote-media-library-runtime';
+import { remoteMediaUploadPort } from '../shared/media-library-protocol';
 
 const libraryQueue = new WriteQueue();
 const files = createFilesService();
@@ -48,7 +49,7 @@ chrome.permissions.onAdded.addListener(accessChanged);
 chrome.permissions.onRemoved.addListener(accessChanged);
 
 chrome.runtime.onConnect.addListener(port => {
-  if (port.name === imageCachePort || port.name === filesPort) return;
+  if ([imageCachePort, filesPort, remoteMediaUploadPort].includes(port.name)) return;
   if (port.name !== uploadPortName || !port.sender || authorizedTab(port.sender, chrome.runtime.id) === undefined) { port.disconnect(); return; }
   const upload = new UploadSession(credentials, uploadRequest, () => chrome.permissions.contains(catboxAccess));
   let connected = true;

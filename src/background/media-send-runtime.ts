@@ -13,7 +13,7 @@ interface MediaScheduler { enqueue(receiver: string, request: {
 
 export async function enqueueMediaRecipients(scheduler: MediaScheduler, configuration: MediaSettings,
   recipients: MediaRecipient[],
-  parameters: SendCommand, sourceUrl: string, now = Date.now, id = crypto.randomUUID): Promise<string[]> {
+  parameters: SendCommand, sourceUrl: string, now = Date.now, id = () => crypto.randomUUID()): Promise<string[]> {
   if (!mediaEnabledOn(configuration, sourceUrl)) throw new Error('CtrlEm is off for this site.');
   if (!recipients.length) throw new Error('Choose a CtrlEm recipient.');
   const ids: string[] = [];

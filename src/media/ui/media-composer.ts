@@ -17,6 +17,7 @@ export class MediaComposer {
   private panel?: HTMLElement; private anchor?: HTMLElement; private resource?: MediaResource;
   private preferences?: MediaComposerPreferences; private kind: MediaRecipient['kind'] = 'group';
   private query = ''; private searchTimer?: number; private closing = false;
+  private searchRevision = 0;
   constructor(private readonly document: Document, private readonly settings: MediaSettingsPort,
     private readonly sender: MediaSendPort, private readonly library: MediaLibraryPort, private readonly showWallpaper: boolean) {}
 
@@ -25,7 +26,7 @@ export class MediaComposer {
     const panel = this.document.createElement('section'); panel.className = 'ctrlem-composer'; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Send with CtrlEm');
     panel.innerHTML = `<header><strong>Send with CtrlEm</strong><button data-close type="button" aria-label="Close">×</button></header><div class="ctrlem-composer-chips" data-selected></div><nav><button data-kind="group" class="active" type="button">Groups</button><button data-kind="user" type="button">People</button></nav><input data-search type="search" placeholder="Search" autocomplete="off"><div class="ctrlem-composer-list" data-list><p>Loading…</p></div><footer data-actions></footer><p class="ctrlem-composer-status" data-status role="status"></p>`;
     this.panel = panel; this.document.body.append(panel); this.position(); this.bind();
-    try { this.preferences = await this.settings.loadComposer(); this.renderSelected(); await Promise.all([this.search(), this.loadCategories()]); }
+    try { this.preferences = await this.settings.loadComposer(); this.renderSelected(); await Promise.all([this.search(), this.loadCategories()]); this.position(); }
     catch (error) { this.status(error instanceof Error ? error.message : 'Couldn’t load CtrlEm.', true); }
   }
   dispose(): void { this.closeNow(); }
@@ -38,9 +39,9 @@ export class MediaComposer {
     this.document.defaultView!.addEventListener('scroll', this.scrolled, true); this.document.defaultView!.addEventListener('resize', this.resized); this.renderActions();
   }
   private async search(): Promise<void> {
-    if (!this.panel) return; const list = this.panel.querySelector('[data-list]')!; list.textContent = 'Loading…';
-    try { const recipients = await this.settings.recipients(this.kind, this.query); if (!this.panel) return; list.replaceChildren(...recipients.map(recipient => this.recipientRow(recipient))); if (!recipients.length) list.textContent = 'Nothing found'; }
-    catch { list.textContent = 'Couldn’t load recipients.'; }
+    if (!this.panel) return; const revision = ++this.searchRevision; const list = this.panel.querySelector('[data-list]')!; list.textContent = 'Loading…';
+    try { const recipients = await this.settings.recipients(this.kind, this.query); if (!this.panel || revision !== this.searchRevision) return; list.replaceChildren(...recipients.map(recipient => this.recipientRow(recipient))); if (!recipients.length) list.textContent = 'Nothing found'; }
+    catch { if (revision === this.searchRevision) list.textContent = 'Couldn’t load recipients.'; }
   }
   private recipientRow(recipient: MediaRecipient): HTMLButtonElement {
     const selected = this.preferences?.selectedRecipients.some(item => item.receiver === recipient.receiver); const button = this.document.createElement('button');
@@ -94,5 +95,5 @@ export class MediaComposer {
   private readonly keydown = (event: KeyboardEvent) => { if (event.key === 'Escape') this.close(); };
   private readonly scrolled = () => this.close(); private readonly resized = () => this.position();
   private close(): void { if (!this.panel || this.closing) return; this.closing = true; this.panel.classList.add('closing'); window.setTimeout(() => this.closeNow(), closeAnimationMs); }
-  private closeNow(): void { clearTimeout(this.searchTimer); this.panel?.remove(); this.panel = undefined; this.anchor = undefined; this.resource = undefined; this.closing = false; this.document.removeEventListener('pointerdown', this.outside, true); this.document.removeEventListener('keydown', this.keydown, true); this.document.defaultView!.removeEventListener('scroll', this.scrolled, true); this.document.defaultView!.removeEventListener('resize', this.resized); }
+  private closeNow(): void { clearTimeout(this.searchTimer); this.searchRevision++; this.panel?.remove(); this.panel = undefined; this.anchor = undefined; this.resource = undefined; this.closing = false; this.document.removeEventListener('pointerdown', this.outside, true); this.document.removeEventListener('keydown', this.keydown, true); this.document.defaultView!.removeEventListener('scroll', this.scrolled, true); this.document.defaultView!.removeEventListener('resize', this.resized); }
 }

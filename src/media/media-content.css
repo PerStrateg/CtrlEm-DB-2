@@ -6,7 +6,7 @@
 .ctrlem-media-actions-floating { position: fixed; right: auto; bottom: auto; transform: translate(-100%, -100%); }
 .ctrlem-composer, .ctrlem-toast { all: initial; box-sizing: border-box; color-scheme: dark; color: #fff; font: 13px/1.35 Inter, system-ui, sans-serif; }
 .ctrlem-composer *, .ctrlem-toast * { box-sizing: border-box; }
-.ctrlem-composer { position: fixed; z-index: 2147483647; display: grid; grid-template-rows: auto auto auto auto minmax(72px, 1fr) auto auto; gap: 9px; width: min(340px, calc(100vw - 20px)); max-height: min(500px, calc(100vh - 20px)); padding: 12px; overflow: hidden; border: 1px solid #333; border-radius: 12px; background: #0d0d0d; box-shadow: 0 16px 44px rgb(0 0 0 / 50%); animation: ctrlem-open 140ms ease-out; }
+.ctrlem-composer { position: fixed; z-index: 2147483647; display: grid; grid-template-rows: auto auto auto auto minmax(72px, 1fr) auto auto auto; gap: 9px; width: min(340px, calc(100vw - 20px)); max-height: min(500px, calc(100vh - 20px)); padding: 12px; overflow-x: hidden; overflow-y: auto; border: 1px solid #333; border-radius: 12px; background: #0d0d0d; box-shadow: 0 16px 44px rgb(0 0 0 / 50%); animation: ctrlem-open 140ms ease-out; }
 .ctrlem-composer.closing { opacity: 0; transform: translateY(5px) scale(.98); transition: opacity 140ms ease, transform 140ms ease; }
 .ctrlem-composer header { display: flex; align-items: center; justify-content: space-between; }.ctrlem-composer header strong { font-size: 14px; }
 .ctrlem-composer header button { border: 0; background: transparent; color: #b0b0b0; font-size: 20px; cursor: pointer; }
