@@ -21,12 +21,12 @@ Each CtrlEm tab also keeps a bounded diagnostic log in memory, reset when the pa
 | VidHosting video uploads | Selected video files go to VidHosting. |
 | RedGifs | Embedded pages, searches, API calls and video playback contact RedGifs and its media hosts. The integration uses temporary API tokens and browser cookies, including copying RedGifs cookies into the CtrlEm storage partition for embedded access. |
 | Save website media | A file you choose is downloaded without source cookies, then uploaded through the corresponding image/video provider and added to your local library. |
-| Send website media | On HTTP/HTTPS pages, the extension identifies direct image and video URLs. Only a URL chosen with an I, W or V action is passed to CtrlEm through its authenticated command API. Page text, cookies and file bodies are not sent by this action. |
+| Send website media | On HTTP/HTTPS pages, the extension identifies direct image and video URLs. Selected images outside supported Discord and RedGifs media hosts are downloaded without source cookies, prepared locally and uploaded to CtrlEm before sending. Supported media links and videos are sent directly through its authenticated command API. Only files you choose are uploaded. |
 | Preview and cache | Media URLs in your library are requested from their hosts and CDNs for previews and local caching. Background cache requests omit credentials and the Referer header; embedded pages and ordinary browser media requests can use browser-managed cookies and referrers. |
 
 Keys and other authorization data are sent to their corresponding providers. The developer does not receive them. Files, messages and authorization data can contain personal information. Services receiving requests also receive ordinary network metadata, such as your IP address. Their own privacy policies, tracking and retention practices apply. The extension cannot guarantee that third-party pages contain no analytics.
 
-Deleting a local library entry or cache does not delete a file already uploaded to a provider. Use the provider's controls for remote deletion where available.
+When CtrlEm image storage is full, the extension replaces its oldest uploads that are not needed by queued or active sends. Other uploads are left untouched. Deleting a local library entry or cache does not delete a file already uploaded to a provider. Use the provider's controls for remote deletion where available.
 
 ## Firefox data consent
 
