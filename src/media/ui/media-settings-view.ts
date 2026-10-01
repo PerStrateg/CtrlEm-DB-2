@@ -22,6 +22,7 @@ export class MediaSettingsView {
   private readonly accessSettings: HTMLButtonElement;
   private stopAccess?: () => void;
   private readonly enabled: HTMLInputElement;
+  private readonly discordOnly: HTMLInputElement;
   private readonly exclude: HTMLButtonElement;
   private readonly excluded: HTMLDivElement;
   private readonly status: HTMLParagraphElement;
@@ -39,11 +40,13 @@ export class MediaSettingsView {
       <button class="ctrlem-site-action" data-access-settings type="button" hidden>Open settings</button>
       <button class="ctrlem-site-action" data-refresh-tab type="button" hidden>Refresh current tab</button>
       <label class="ctrlem-setting"><span><strong>Enabled</strong><small>Show send controls</small></span><input data-enabled type="checkbox" disabled></label>
+      <label class="ctrlem-setting"><span><strong>Discord only</strong><small>Show controls only on Discord</small></span><input data-discord-only type="checkbox" disabled></label>
       <button class="ctrlem-site-action" data-exclude type="button" hidden></button>
       <details><summary>Excluded sites <span data-count></span></summary><div class="ctrlem-excluded" data-excluded></div></details>
       <p class="ctrlem-settings-status" data-status role="status">Loading…</p>
       <button data-retry type="button" hidden>Retry</button>`;
     this.enabled = this.element.querySelector('[data-enabled]')!;
+    this.discordOnly = this.element.querySelector('[data-discord-only]')!;
     this.exclude = this.element.querySelector('[data-exclude]')!;
     this.excluded = this.element.querySelector('[data-excluded]')!;
     this.status = this.element.querySelector('[data-status]')!;
@@ -59,6 +62,7 @@ export class MediaSettingsView {
     this.notice.append(document.createTextNode(mediaCopy.accessMissing));
     this.notice.append(createInfoButton(document, 'Why controls are missing', mediaCopy.accessMissing));
     this.enabled.onchange = () => this.update({ ...this.value!, enabled: this.enabled.checked });
+    this.discordOnly.onchange = () => this.update({ ...this.value!, discordOnly: this.discordOnly.checked });
     this.exclude.onclick = () => this.toggleHost();
     if (accessUi) {
       const changed = (granted: boolean) => { this.accessGranted = granted; this.needsRefresh ||= !granted; this.renderAccess(); };
@@ -96,6 +100,7 @@ export class MediaSettingsView {
     this.accessSettings.hidden = this.accessGranted;
     this.refresh.hidden = !this.accessGranted || !this.needsRefresh || this.accessUi?.refreshTab === undefined;
     this.enabled.disabled = !this.value || !this.accessGranted;
+    this.discordOnly.disabled = !this.value || !this.accessGranted;
     // Without access the stored preference cannot take effect on any site.
     this.enabled.checked = this.accessGranted && this.value?.enabled === true;
   }
@@ -104,6 +109,7 @@ export class MediaSettingsView {
     if (!this.value) return;
     this.enabled.disabled = false;
     this.enabled.checked = this.value.enabled; this.exclude.hidden = !this.activeHost;
+    this.discordOnly.checked = this.value.discordOnly;
     this.renderAccess();
     if (this.activeHost) this.exclude.textContent = this.value.excludedHosts.includes(this.activeHost) ? `Allow ${this.activeHost}` : `Exclude ${this.activeHost}`;
     this.element.querySelector('[data-count]')!.textContent = this.value.excludedHosts.length ? `(${this.value.excludedHosts.length})` : '';

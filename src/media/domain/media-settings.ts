@@ -19,17 +19,22 @@ const hostnameSchema = z.string().min(1).max(mediaSettingsLimits.hostnameCharact
 
 export const mediaSettingsSchema = z.object({
   enabled: z.boolean(),
+  discordOnly: z.boolean(),
   excludedHosts: z.array(hostnameSchema),
 }).strict().refine(value => new Set(value.excludedHosts).size === value.excludedHosts.length);
 export type MediaSettings = z.infer<typeof mediaSettingsSchema>;
 
 export const defaultMediaSettings = (): MediaSettings => ({
   enabled: true,
+  discordOnly: false,
   excludedHosts: [],
 });
 
 export function mediaEnabledOn(settings: MediaSettings, url: string): boolean {
   if (!settings.enabled) return false;
-  try { return !settings.excludedHosts.includes(new URL(url).hostname.toLowerCase()); }
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return (!settings.discordOnly || host === 'discord.com') && !settings.excludedHosts.includes(host);
+  }
   catch { return false; }
 }

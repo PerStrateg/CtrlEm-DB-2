@@ -38,7 +38,7 @@ export class FilesClient {
       port.onDisconnect.addListener(disconnect); signal?.addEventListener('abort', abort, { once: true });
       port.onMessage.addListener(reply => {
         if (reply.error) finish(new Error(reply.error));
-        else if (reply.type === 'chunk') { chunks.push(Uint8Array.from(atob(reply.data), c => c.charCodeAt(0))); port.postMessage({ type: 'ack' }); }
+        else if (reply.type === 'chunk') { chunks.push(Uint8Array.fromBase64(reply.data)); port.postMessage({ type: 'ack' }); }
         else if (reply.type === 'done') finish(undefined, new Blob(chunks, { type: reply.mime }));
       });
       if (signal?.aborted) abort(); else port.postMessage({ type: 'get', id, part });

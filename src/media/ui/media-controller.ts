@@ -9,6 +9,8 @@ import { MediaPopoverHost } from './media-popover';
 import { MediaPreferencesStore } from './media-preferences';
 import { MediaRecipientsPopover } from './media-recipients-popover';
 import { MediaSavePopover } from './media-save-popover';
+import { mediaActions } from '../domain/media-resource';
+import { mediaSendIdentity, mediaSendFeedbackMs, type MediaSendFeedback } from '../domain/media-send-feedback';
 
 interface MountedMedia {
   key: string;
@@ -29,7 +31,7 @@ export class MediaController {
   private readonly preferences: MediaPreferencesStore;
   private settingsPopover?: MediaRecipientsPopover;
   private savePopover?: MediaSavePopover;
-  private sending = false;
+  private readonly feedback = new Map<string, { value: MediaSendFeedback; timer?: number }>();
   private disposed = false;
   private stopInfoTips?: () => void;
 
@@ -65,6 +67,7 @@ export class MediaController {
       this.hover.element.dataset.kind = target.resource.kind;
       this.hover.element.classList.add('ctrlem-media-actions-floating');
     } else this.hover.set(target.resource);
+    this.reflectBarFeedback(this.hover, target.resource);
     const rect = target.element.getBoundingClientRect();
     const window = this.document.defaultView!;
     this.hover.element.style.left = `${Math.min(window.innerWidth, Math.max(0, rect.right))}px`;
@@ -102,6 +105,7 @@ export class MediaController {
       if (current?.element !== target.element) this.detach(current);
       const bar = current?.bar ?? this.createBar(target.resource);
       bar.set(target.resource);
+      this.reflectBarFeedback(bar, target.resource);
       target.element.classList.add('ctrlem-media-host');
       if (bar.element.parentElement !== target.element) {
         const previous = bar.element.parentElement;
@@ -123,7 +127,7 @@ export class MediaController {
       openSave: (anchor, current) => this.openSave(anchor, current),
     });
     bar.applyRecipients(this.preferences.recipientNames);
-    bar.setSending(this.sending);
+    this.reflectBarFeedback(bar, resource);
     return bar;
   }
 
@@ -145,31 +149,53 @@ export class MediaController {
 
   /** Quick send uses one deterministic snapshot of the resource and the persisted common recipients. */
   private async quickSend(resource: MediaResource, action: MediaAction): Promise<void> {
-    if (this.sending) return;
-    this.setSending(true);
-    this.toast('Sending…');
     const intent = { resource: { ...resource }, action };
     const targets = this.preferences.current?.selectedRecipients.map(recipient => ({ ...recipient }));
+    if (!targets?.length || this.disposed) return;
+    const key = mediaSendIdentity(resource, action, targets);
+    if (this.feedback.get(key)?.value.status === 'sending') return;
+    this.setFeedback(key, { status: 'sending', message: 'Sending…' });
     try {
       await this.preferences.flush();
-      if (this.disposed || !targets?.length) return;
+      if (this.disposed) return;
       const result = await this.sender.send(intent, targets);
-      this.toast(result.failed ? `Sent ${result.sent}, failed ${result.failed}` : `Sent to ${result.sent}`);
+      const message = result.failed ? `Sent ${result.sent}, failed ${result.failed}` : `Sent to ${result.sent}`;
+      this.setFeedback(key, { status: result.failed ? 'failed' : 'sent', message });
+      this.toast(message, result.failed > 0);
     } catch (error) {
+      this.setFeedback(key, { status: 'failed', message: 'Couldn’t send. Retry.' });
       this.toast(error instanceof Error ? error.message : 'Couldn’t send.', true);
-    } finally { this.setSending(false); }
+    }
   }
 
-  private setSending(value: boolean): void {
-    this.sending = value;
-    for (const entry of this.mounted.values()) entry.bar.setSending(value);
-    this.hover?.setSending(value);
+  private setFeedback(key: string, value: MediaSendFeedback): void {
+    if (this.disposed) return;
+    this.document.defaultView!.clearTimeout(this.feedback.get(key)?.timer);
+    const entry: { value: MediaSendFeedback; timer?: number } = { value };
+    this.feedback.set(key, entry);
+    if (value.status !== 'sending') entry.timer = this.document.defaultView!.setTimeout(() => {
+      this.feedback.delete(key); this.reflectFeedback();
+    }, mediaSendFeedbackMs);
+    this.reflectFeedback();
+  }
+
+  private reflectBarFeedback(bar: MediaActionBar, resource: MediaResource): void {
+    const recipients = this.preferences.current?.selectedRecipients ?? [];
+    for (const action of mediaActions(resource.kind)) {
+      bar.setFeedback(action, this.feedback.get(mediaSendIdentity(resource, action, recipients))?.value);
+    }
+  }
+
+  private reflectFeedback(): void {
+    for (const entry of this.mounted.values()) this.reflectBarFeedback(entry.bar, entry.bar.currentResource);
+    if (this.hover) this.reflectBarFeedback(this.hover, this.hover.currentResource);
   }
 
   private reflectRecipients(): void {
     const names = this.preferences.recipientNames;
     for (const entry of this.mounted.values()) entry.bar.applyRecipients(names);
     this.hover?.applyRecipients(names);
+    this.reflectFeedback();
     this.settingsPopover?.refresh();
     this.savePopover?.refresh();
   }
@@ -195,6 +221,8 @@ export class MediaController {
 
   dispose(): void {
     this.disposed = true;
+    for (const entry of this.feedback.values()) this.document.defaultView!.clearTimeout(entry.timer);
+    this.feedback.clear();
     this.preferences.dispose();
     this.stopInfoTips?.();
     this.observer?.disconnect();

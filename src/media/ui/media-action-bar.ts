@@ -1,4 +1,5 @@
 import type { MediaAction, MediaResource } from '../domain/media-resource';
+import type { MediaSendFeedback } from '../domain/media-send-feedback';
 
 export interface MediaActionBarHandlers {
   send(action: MediaAction, resource: MediaResource): void;
@@ -9,6 +10,9 @@ export interface MediaActionBarHandlers {
 interface QuickSend { action: MediaAction; label: string; icon: keyof typeof iconPaths }
 
 const iconPaths = {
+  sending: 'M12 3a9 9 0 1 1-9 9',
+  sent: 'm5 12 4 4L19 6',
+  failed: 'M12 4v10 M12 19h.01',
   save: 'M4 3h13l4 4v14H3V3h1Z M7 3v6h9V3 M7 21v-8h10v8',
   settings: 'm10 3-.6 2.3-2 .9-2.1-.7-2 3.5 1.6 1.6v2.8l-1.6 1.6 2 3.5 2.1-.7 2 .9.6 2.3h4l.6-2.3 2-.9 2.1.7 2-3.5-1.6-1.6v-2.8l1.6-1.6-2-3.5-2.1.7-2-.9L14 3Z M15 12a3 3 0 1 1-6 0 3 3 0 1 1 6 0',
   image: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z M3 17l6-6 4 4 3-3 5 5 M17 8a1 1 0 1 1-2 0 1 1 0 1 1 2 0',
@@ -33,6 +37,9 @@ export class MediaActionBar {
   private readonly save: HTMLButtonElement;
   private readonly settings: HTMLButtonElement;
   private names = '';
+  private readonly feedback = new Map<MediaAction, MediaSendFeedback>();
+
+  get currentResource(): MediaResource { return this.resource; }
 
   constructor(private readonly document: Document, resource: MediaResource, private readonly handlers: MediaActionBarHandlers) {
     this.resource = resource;
@@ -44,7 +51,10 @@ export class MediaActionBar {
     this.save.addEventListener('click', event => { stop(event); this.handlers.openSave(this.save, this.resource); });
     for (const send of quickSends.image.concat(quickSends.video)) {
       const button = this.icon(`ctrlem-media-send ctrlem-media-send-${send.action}`, send.label, send.icon);
-      button.addEventListener('click', event => { stop(event); this.handlers.send(send.action, this.resource); });
+      button.addEventListener('click', event => {
+        stop(event);
+        if (button.getAttribute('aria-disabled') !== 'true') this.handlers.send(send.action, this.resource);
+      });
       this.sendButtons.set(send.action, button);
     }
     this.stack = document.createElement('div');
@@ -71,16 +81,28 @@ export class MediaActionBar {
       const button = this.sendButtons.get(send.action)!;
       button.hidden = !names;
       if (!names) continue;
-      button.dataset.info = names;
+      this.renderFeedback(send, button);
       button.removeAttribute('title');
     }
   }
 
-  setSending(value: boolean): void {
-    for (const button of this.sendButtons.values()) {
-      button.disabled = value;
-      button.setAttribute('aria-busy', String(value));
-    }
+  setFeedback(action: MediaAction, value?: MediaSendFeedback): void {
+    if (value) this.feedback.set(action, value); else this.feedback.delete(action);
+    const send = quickSends[this.resource.kind].find(send => send.action === action);
+    if (send) this.renderFeedback(send, this.sendButtons.get(action)!);
+  }
+
+  private renderFeedback(send: QuickSend, button: HTMLButtonElement): void {
+    const value = this.feedback.get(send.action);
+    const status = value?.status ?? 'idle';
+    button.dataset.sendState = status;
+    button.setAttribute('aria-busy', String(status === 'sending'));
+    button.setAttribute('aria-disabled', String(status === 'sending'));
+    button.setAttribute('aria-label', value?.message ?? send.label);
+    button.dataset.info = value ? `${value.message}\n${this.names}` : this.names;
+    const path = button.querySelector('path')!;
+    const icon = iconPaths[value?.status ?? send.icon];
+    if (path.getAttribute('d') !== icon) path.setAttribute('d', icon);
   }
 
   remove(): void {

@@ -10,7 +10,10 @@
 .ctrlem-media-actions button:hover { background: #2c2c2c; }
 .ctrlem-media-actions button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .ctrlem-media-actions [hidden] { display: none; }
-.ctrlem-media-actions [aria-busy='true'] svg { animation: ctrlem-sending 1s ease-in-out infinite alternate; }
+.ctrlem-media-actions [aria-busy='true'] { animation: ctrlem-sending 1s ease-in-out infinite alternate; cursor: wait; }
+.ctrlem-media-actions [aria-busy='true'] svg { animation: ctrlem-send-spinner 1s linear infinite; }
+.ctrlem-media-actions [data-send-state='sent'] { color: #7ee2a8; }
+.ctrlem-media-actions [data-send-state='failed'] { color: #ff8f8f; }
 .ctrlem-media-actions { align-items: flex-end; }
 .ctrlem-media-actions .ctrlem-media-gear { color: var(--accent-primary); }
 .ctrlem-media-gear svg { transition: transform 180ms ease; }
@@ -47,7 +50,8 @@
 .ctrlem-toast.error { border-left-color: #ff8f8f; }
 .ctrlem-toast.closing { opacity: 0; transform: translateY(5px); }
 @keyframes ctrlem-sending { to { opacity: .25; } }
+@keyframes ctrlem-send-spinner { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
-  .ctrlem-media-actions, .ctrlem-media-actions svg, .ctrlem-popover, .ctrlem-toast { animation: none; transition: none; }
+  .ctrlem-media-actions, .ctrlem-media-actions button, .ctrlem-media-actions svg, .ctrlem-popover, .ctrlem-toast { animation: none; transition: none; }
   .ctrlem-media-gear svg { transform: none; }
 }

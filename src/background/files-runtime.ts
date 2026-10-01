@@ -56,8 +56,7 @@ export function registerFiles(service: FilesService, clearQueue: () => Promise<v
           const blob = await service.blob(tabId, message.id, message.part, abort.signal);
           for (let offset = 0; offset < blob.size && !abort.signal.aborted; offset += filesPolicy.chunkBytes) {
             const bytes = new Uint8Array(await blob.slice(offset, offset + filesPolicy.chunkBytes).arrayBuffer());
-            let binary = ''; for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
-            await new Promise<void>(resolve => { acknowledge = resolve; send({ type: 'chunk', data: btoa(binary) }); });
+            await new Promise<void>(resolve => { acknowledge = resolve; send({ type: 'chunk', data: bytes.toBase64() }); });
           }
           send({ type: 'done', mime: blob.type }); return;
         }
@@ -67,7 +66,7 @@ export function registerFiles(service: FilesService, clearQueue: () => Promise<v
           header = message;
         } else if (message.type === 'chunk') {
           if (!header) throw new Error('Invalid transfer.');
-          const bytes = Uint8Array.from(atob(message.data), c => c.charCodeAt(0)); size += bytes.length;
+          const bytes = Uint8Array.fromBase64(message.data); size += bytes.length;
           if (size > header.size) throw new Error('File transfer exceeds its declared size.'); chunks.push(bytes);
         } else if (message.type === 'finish') {
           if (!header || size !== header.size) throw new Error('Incomplete file transfer.');
