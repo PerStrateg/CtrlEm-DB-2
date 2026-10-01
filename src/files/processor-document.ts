@@ -1,9 +1,9 @@
-import { FilesRepository } from '../storage/files-store';
+import { ProcessingBlobsRepository } from '../storage/processing-blobs-store';
 import { imageProcessorPort, type ImageProcessorCommand, type ImageProcessorNotice } from './image-processor-protocol';
 import type { ImagePreparationJob } from './image-processor-protocol';
 import type { ImagePreparationProgress } from '../model/files';
 
-const repository = new FilesRepository();
+const repository = new ProcessingBlobsRepository();
 /** Cancellation kills the decoder mid-encode, so it is rebuilt lazily on the next job. */
 let decoder: Worker | undefined;
 const codec = () => decoder ??= new Worker(chrome.runtime.getURL('files-worker.js'));
@@ -15,9 +15,9 @@ const notice = (port: chrome.runtime.Port, message: ImageProcessorNotice) => {
   try { port.postMessage(message); } catch { decoder?.terminate(); decoder = undefined; }
 };
 
-async function run(port: chrome.runtime.Port, job: ImagePreparationJob): Promise<number> {
-  const original = await repository.get(job.id, 'original');
-  if (!original) throw new Error('Local image is unavailable. Add it again.');
+async function run(port: chrome.runtime.Port, job: ImagePreparationJob): Promise<void> {
+  const original = await repository.get(job.token);
+  if (!original) throw new Error('Image is unavailable. Try again.');
   if (cancelled.has(job.token)) throw new Error('Image preparation cancelled.');
   const worker = codec();
   const output = await new Promise<Blob>((resolve, reject) => {
@@ -32,9 +32,7 @@ async function run(port: chrome.runtime.Port, job: ImagePreparationJob): Promise
   });
   if (cancelled.has(job.token)) throw new Error('Image preparation cancelled.');
   if (job.part === 'prepared') void notice(port, { type: 'image-processor:progress', token: job.token, value: { phase: 'storing' } });
-  // IndexedDB keeps generation and removal checks inside the repository transaction; no Blob crosses a port.
-  await repository.put(job.generation, job.id, job.part, output);
-  return output.size;
+  await repository.put(job.token, output);
 }
 
 const port = chrome.runtime.connect({ name: imageProcessorPort });
@@ -47,7 +45,7 @@ const port = chrome.runtime.connect({ name: imageProcessorPort });
     }
     const work = queue.then(() => run(port, command.job));
     queue = work.then(() => undefined, () => undefined);
-    void work.then(bytes => notice(port, { type: 'image-processor:settled', token: command.job.token, bytes }),
+    void work.then(() => notice(port, { type: 'image-processor:settled', token: command.job.token }),
       error => notice(port, { type: 'image-processor:settled', token: command.job.token, error: error instanceof Error ? error.message : 'Image processing failed.' }))
       .finally(() => cancelled.delete(command.job.token));
   });

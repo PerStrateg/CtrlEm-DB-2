@@ -1,10 +1,12 @@
 import { CtrlemRecipientDirectoryAdapter } from '../media/adapters/ctrlem-recipient-directory';
+import { fetchProfileHtml } from '../media/adapters/ctrlem-profile-recipient-lookup';
 import { mediaSettingsSchema } from '../media/domain/media-settings';
 import { mediaComposerPreferencesSchema } from '../media/domain/media-composer';
-import { mediaSettingsRequestSchema } from '../shared/media-settings-protocol';
+import { mediaSettingsRequestSchema, mediaProfileHtmlSchema } from '../shared/media-settings-protocol';
 import { MediaSettingsRepository } from '../storage/media-settings-store';
 import { MediaComposerRepository } from '../storage/media-composer-store';
 import { WriteQueue } from '../storage/library-store';
+import { websiteAccess } from '../shared/website-access';
 
 export function registerMediaSettings(): { settings: MediaSettingsRepository; composer: MediaComposerRepository } {
   const repository = new MediaSettingsRepository(chrome.storage.local);
@@ -25,8 +27,12 @@ export function registerMediaSettings(): { settings: MediaSettingsRepository; co
     if (!parsed.success || (!extensionPage && !webPage)) {
       respond({ ok: false, error: 'Request not allowed.' }); return false;
     }
-    const operation = parsed.data.type === 'media-settings:get' ? repository.read()
+    const operation = parsed.data.type === 'media-settings:access-get' ? chrome.permissions.contains(websiteAccess)
+      : parsed.data.type === 'media-settings:open-options' ? chrome.runtime.openOptionsPage()
+      : parsed.data.type === 'media-settings:get' ? repository.read()
       : parsed.data.type === 'media-settings:composer-get' ? composer.read()
+      : parsed.data.type === 'media-settings:profile-html'
+        ? fetchProfileHtml(parsed.data.code, fetch).then(html => mediaProfileHtmlSchema.parse(html))
       : parsed.data.type === 'media-settings:recipients' ? directory.search(parsed.data.search.kind, parsed.data.search.query)
       : parsed.data.type === 'media-settings:composer-save' ? saveComposer(parsed.data.preferences)
       : save(parsed.data.settings);
@@ -36,13 +42,18 @@ export function registerMediaSettings(): { settings: MediaSettingsRepository; co
     });
     return true;
   });
+  const accessChanged = () => void chrome.permissions.contains(websiteAccess).then(granted =>
+    broadcast({ type: 'media-settings:access-changed', granted }));
+  chrome.permissions.onAdded.addListener(accessChanged);
+  chrome.permissions.onRemoved.addListener(accessChanged);
   const save = (input: unknown) => writes.run(async () => {
     const settings = mediaSettingsSchema.parse(input);
-    await repository.save(settings); await broadcast(settings); return settings;
+    await repository.save(settings); await broadcast({ type: 'media-settings:changed', settings }); return settings;
   });
   const saveComposer = (input: unknown) => writes.run(async () => {
     const preferences = mediaComposerPreferencesSchema.parse(input);
-    await composer.save(preferences); return preferences;
+    await composer.save(preferences);
+    await broadcast({ type: 'media-settings:composer-changed', preferences }); return preferences;
   });
   return { settings: repository, composer };
 }
@@ -51,8 +62,9 @@ function isWeb(value?: string): boolean {
   try { return Boolean(value && ['http:', 'https:'].includes(new URL(value).protocol)); } catch { return false; }
 }
 
-async function broadcast(settings: ReturnType<typeof mediaSettingsSchema.parse>): Promise<void> {
+async function broadcast(message: unknown): Promise<void> {
+  await chrome.runtime.sendMessage(message).catch(() => undefined);
   const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
   await Promise.all(tabs.map(tab => tab.id === undefined ? undefined :
-    chrome.tabs.sendMessage(tab.id, { type: 'media-settings:changed', settings }).catch(() => undefined)));
+    chrome.tabs.sendMessage(tab.id, message).catch(() => undefined)));
 }

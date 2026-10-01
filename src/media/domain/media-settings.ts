@@ -19,14 +19,12 @@ const hostnameSchema = z.string().min(1).max(mediaSettingsLimits.hostnameCharact
 
 export const mediaSettingsSchema = z.object({
   enabled: z.boolean(),
-  showWallpaper: z.boolean(),
   excludedHosts: z.array(hostnameSchema),
 }).strict().refine(value => new Set(value.excludedHosts).size === value.excludedHosts.length);
 export type MediaSettings = z.infer<typeof mediaSettingsSchema>;
 
 export const defaultMediaSettings = (): MediaSettings => ({
   enabled: true,
-  showWallpaper: true,
   excludedHosts: [],
 });
 

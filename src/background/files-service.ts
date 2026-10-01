@@ -1,8 +1,8 @@
 import { filesPolicy } from '../model/files';
-import type { FilePart, FileProgress, FilesGallery, FilesSnapshot, FilesProgressSnapshot, NativeUpload } from '../model/files';
-import type { ImagePreparationJob } from '../files/image-processor-protocol';
+import type { FilePart, FileProgress, FilesGallery, FilesSnapshot, FilesProgressSnapshot } from '../model/files';
 import { FilesRepository } from '../storage/files-store';
-import type { UploadsPort } from '../uploads/ports/uploads-port';
+import { NativeImageService, nativeUploadUrl } from '../uploads/native-image-service';
+import { localImageSource } from '../uploads/domain/prepared-image';
 import { WriteQueue } from '../storage/library-store';
 import { ProcessorHost } from '../files/processor-host';
 import { bounded } from '../files/request-bound';
@@ -20,15 +20,12 @@ interface Job { id: string; part: FilePart; generation: string; abort: AbortCont
 export class FilesService implements FilesSource {
   readonly repository = new FilesRepository();
   readonly writes = new WriteQueue();
-  private readonly native: UploadsPort;
-  private readonly processor = new ProcessorHost(
-    (message, blob) => this.writes.run(() => this.repository.put(message.generation, message.id, message.part, blob)),
-    (token, value) => this.processProgress(token, value));
+  readonly processor = new ProcessorHost();
   private readonly jobs = new Map<string, Job>();
   private readonly progress = new Map<string, { token: string; value: FileProgress }>();
   private progressRevision = Date.now();
   constructor(private readonly changed: () => void, private readonly progressChanged: (snapshot: FilesProgressSnapshot) => void,
-    native: UploadsPort) { this.native = native; }
+    private readonly images: NativeImageService) {}
   progressSnapshot(): FilesProgressSnapshot { return { revision: this.progressRevision, items: [...this.progress.values()].map(({ value }) => value) }; }
   processProgress(token: string, progress: Omit<FileProgress, 'id' | 'stage'>): void {
     const job = this.jobs.get(token);
@@ -60,9 +57,10 @@ export class FilesService implements FilesSource {
   async gallery(): Promise<FilesGallery> {
     const request = bounded(filesPolicy.galleryReadMs);
     try {
-      const uploads = await this.native.listUploads(request.signal);
+      const uploads = await this.images.uploads.listUploads(request.signal);
+      const present = new Set(uploads.map(upload => upload.id));
       await this.writes.run(() => this.repository.update(state => {
-        for (const item of state.items) if (item.uploadId && !uploads.some(upload => upload.id === item.uploadId)) delete item.uploadId;
+        for (const item of state.items) if (item.uploadId && !present.has(item.uploadId)) delete item.uploadId;
       }));
       return { uploads };
     } catch (error) { return { uploads: [], error: error instanceof Error ? error.message : 'Could not read CtrlEm uploads.' }; }
@@ -96,7 +94,9 @@ export class FilesService implements FilesSource {
       if (signal.aborted) cancel();
       const original = await this.repository.get(id, 'original');
       if (!original) throw new Error('Local image is unavailable. Add it again.');
-      const bytes = await this.processor.run({ token, id, part, generation: state.generation }, original, abort.signal);
+      const blob = await this.processor.run({ token, part }, original, abort.signal, (token, value) => this.processProgress(token, value));
+      await this.writes.run(() => this.repository.put(state.generation, id, part, blob));
+      const bytes = blob.size;
       if (part === 'prepared') reportTabDiagnostic(tabId, 'files.prepare', { outcome: 'success', stage: 'encode', durationMs: performance.now() - startedAt, outputBytes: bytes });
     } catch (error) {
       const cancelled = abort.signal.aborted && !timedOut;
@@ -107,47 +107,31 @@ export class FilesService implements FilesSource {
       if (part === 'prepared') this.setProgress(id, token);
     }
   }
-  /** Frees only a slot this extension owns. A full foreign gallery fails instead of deleting. */
-  private async freeSlot(uploads: NativeUpload[], owned: Set<string>, signal: AbortSignal): Promise<void> {
-    if (uploads.length < filesPolicy.capacity) return;
-    const evictable = uploads.filter(upload => owned.has(upload.id)).sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
-    if (!evictable.length) throw new Error('CtrlEm has no free image slot. Delete an upload, then Resume.');
-    await this.native.deleteUpload(evictable[0]!.id, signal);
-  }
   async resolve(id: string, signal: AbortSignal, tabId: number): Promise<string> {
     const startedAt = performance.now();
-    let filename: string | undefined;
-    const request = bounded(filesPolicy.uploadMs, signal);
+    const state = await this.repository.read(), item = state.items.find(item => item.id === id);
+    if (!item) throw new Error('File no longer available.');
+    const filename = item.name, token = crypto.randomUUID();
+    reportTabDiagnostic(tabId, 'files.prepare', { outcome: 'start', stage: 'upload', filename });
+    this.setProgress(id, token, { id, stage: 'uploading' });
     try {
-      signal.throwIfAborted();
-      const state = await this.repository.read(), item = state.items.find(item => item.id === id);
-      if (!item) throw new Error('File no longer available.');
-      filename = item.name;
-      reportTabDiagnostic(tabId, 'files.prepare', { outcome: 'start', stage: 'upload', filename });
-      const uploads = await this.native.listUploads(request.signal);
-      const existing = uploads.find(upload => upload.id === item.uploadId);
-      if (existing) return `https://ctrlem.com${existing.url}`;
-      const blob = await this.repository.get(id, 'prepared');
-      if (!blob || blob.size > filesPolicy.maxUploadBytes) throw new Error('The image has not been prepared.');
-      await this.freeSlot(uploads, new Set(state.items.flatMap(file => file.uploadId ? [file.uploadId] : [])), request.signal);
-      signal.throwIfAborted();
-      const extension = blob.type === 'image/jpeg' ? 'jpg' : blob.type.split('/')[1];
-      const token = crypto.randomUUID();
-      this.setProgress(id, token, { id, stage: 'uploading' });
-      let uploaded;
-      try { uploaded = await this.native.uploadImage(blob, `${item.name.replace(/\.[^.]+$/, '')}.${extension}`, request.signal); }
-      finally { this.setProgress(id, token); }
-      const kept = new Set(uploads.map(upload => upload.id));
+      const uploaded = await this.images.resolve(localImageSource(id), async () => {
+        const blob = await this.repository.get(id, 'prepared');
+        if (!blob) throw new Error('The image has not been prepared.');
+        const extension = blob.type === 'image/jpeg' ? 'jpg' : blob.type.split('/')[1];
+        return { blob, name: `${item.name.replace(/\.[^.]+$/, '')}.${extension}` };
+      }, signal);
       await this.writes.run(() => this.repository.update(current => {
         if (current.generation !== state.generation) return;
-        const file = current.items.find(file => file.id === id); if (file) file.uploadId = uploaded.id;
-        for (const file of current.items) if (file.uploadId && file.id !== id && !kept.has(file.uploadId)) delete file.uploadId;
+        const file = current.items.find(file => file.id === id);
+        if (file) file.uploadId = uploaded.id;
       }));
-      this.changed(); return `https://ctrlem.com${uploaded.url}`;
+      this.changed(); return nativeUploadUrl(uploaded);
     } catch (error) {
-      reportTabDiagnostic(tabId, 'files.prepare', { outcome: signal.aborted ? 'cancelled' : 'failed', stage: 'upload', filename, durationMs: performance.now() - startedAt, code: classifyDiagnosticError(error) });
+      reportTabDiagnostic(tabId, 'files.prepare', { outcome: signal.aborted ? 'cancelled' : 'failed', stage: 'upload', filename,
+        durationMs: performance.now() - startedAt, code: classifyDiagnosticError(error) });
       throw error;
-    } finally { request.dispose(); }
+    } finally { this.setProgress(id, token); }
   }
   async preferences(change: Partial<Pick<FilesSnapshot, 'previews' | 'interval' | 'selected'>>): Promise<FilesSnapshot> {
     const state = await this.writes.run(() => this.repository.update(state => {

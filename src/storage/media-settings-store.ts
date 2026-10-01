@@ -1,7 +1,7 @@
 import { defaultMediaSettings, mediaSettingsSchema, type MediaSettings } from '../media/domain/media-settings';
 import type { StorageArea } from './library-store';
 
-const storageKey = 'ctrlem.media-settings-v2';
+const storageKey = 'ctrlem.media-settings-v3';
 
 export class MediaSettingsRepository {
   constructor(private readonly storage: StorageArea) {}

@@ -1,0 +1,14 @@
+/* Media settings panel shared by the toolbar popup and the settings page. */
+.ctrlem-media-settings { display: grid; gap: var(--ctrlem-db-space-2); }
+.ctrlem-media-settings header { display: flex; align-items: center; gap: var(--ctrlem-db-space-3); }
+.ctrlem-media-settings header div, .ctrlem-setting span { display: grid; }
+.ctrlem-media-settings small, .ctrlem-media-settings details { color: var(--text-secondary); }
+.ctrlem-brand { display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--border-radius); background: var(--accent-primary); font-weight: 800; }
+.ctrlem-setting, .ctrlem-excluded-row { display: flex; align-items: center; justify-content: space-between; gap: var(--ctrlem-db-space-3); }
+.ctrlem-setting { padding: var(--ctrlem-db-space-2) var(--ctrlem-db-space-3); border: 1px solid var(--border-color); border-radius: var(--border-radius); background: var(--bg-tertiary); }
+.ctrlem-setting input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--accent-primary); }
+.ctrlem-site-action { width: 100%; }
+.ctrlem-excluded { display: grid; gap: var(--ctrlem-db-space-2); max-height: 120px; overflow: auto; margin-top: var(--ctrlem-db-space-2); }
+.ctrlem-excluded-row { padding: var(--ctrlem-db-space-1) var(--ctrlem-db-space-2); border-radius: var(--border-radius); background: var(--bg-tertiary); font-family: ui-monospace, monospace; }
+.ctrlem-settings-status { min-height: 1.5em; }
+.ctrlem-settings-status.error { color: #ff8f8f; }

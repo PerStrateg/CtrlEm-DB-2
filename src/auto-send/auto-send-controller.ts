@@ -39,6 +39,7 @@ export class AutoSendController {
     });
   }
   start(): void {
+    if (!this.receiver) return;
     this.intervals?.start();
     this.page.native.mount(command => { void this.enqueue(command); }, message => { this.error = message; this.render(); });
     this.cleanups.push(this.client.subscribe(snapshot => {

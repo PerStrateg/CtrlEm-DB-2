@@ -5,6 +5,7 @@ import { commands } from '../model/commands';
 import type { MediaSettingsRepository } from '../storage/media-settings-store';
 import { mediaEnabledOn, type MediaRecipient, type MediaSettings } from '../media/domain/media-settings';
 import type { SendCommand } from '../model/send-command';
+import type { MediaDeliveryService } from '../media/media-delivery-service';
 
 interface MediaScheduler { enqueueBatch(requests: { receiver: string; request: {
   type: 'auto:enqueue'; id: string; createdAt: number; parameters: SendCommand;
@@ -20,7 +21,7 @@ export async function enqueueMediaRecipients(scheduler: MediaScheduler, configur
   return scheduler.enqueueBatch(requests);
 }
 
-export function registerMediaSend(scheduler: AutoSendService, settings: MediaSettingsRepository): void {
+export function registerMediaSend(scheduler: AutoSendService, settings: MediaSettingsRepository, delivery: MediaDeliveryService): void {
   chrome.runtime.onMessage.addListener((input: unknown, sender, respond) => {
     if ((input as { type?: string })?.type !== 'media-send:enqueue') return false;
     const parsed = mediaSendRequestSchema.safeParse(input);
@@ -30,10 +31,10 @@ export function registerMediaSend(scheduler: AutoSendService, settings: MediaSet
       respond({ ok: false, error: 'Request not allowed.' }); return false;
     }
     const key = mediaCommandByAction[parsed.data.action];
-    const parameters = { key, label: commands[key].label,
-      fields: [{ id: commands[key].fieldId, value: parsed.data.resource.url }] };
     void settings.read().then(async configuration => {
-      return enqueueMediaRecipients(scheduler, configuration, parsed.data.recipients, parameters, source.href);
+      if (!mediaEnabledOn(configuration, source.href)) throw new Error('CtrlEm is off for this site.');
+      return delivery.send(parsed.data.resource, url => enqueueMediaRecipients(scheduler, configuration, parsed.data.recipients,
+        { key, label: commands[key].label, fields: [{ id: commands[key].fieldId, value: url }] }, source.href));
     }).then(result => respond({ ok: true, value: result }), error => respond({ ok: false,
       error: error instanceof Error ? error.message : 'Couldn’t send to CtrlEm.' }));
     return true;

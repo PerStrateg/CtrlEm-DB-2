@@ -1,0 +1,5 @@
+/* Toolbar popup shell. Component styles come from the bundled UI stylesheets. */
+body { width: 320px; margin: 0; }
+body > .ctrlem-media-settings { padding: var(--ctrlem-db-space-3); }
+
+.ctrlem-access-notice { margin: 0 0 var(--ctrlem-db-space-2); }

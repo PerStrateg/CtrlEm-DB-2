@@ -1,6 +1,7 @@
 import { imageProcessorPort, type ImageProcessorNotice } from './image-processor-protocol';
 import type { ImagePreparationJob } from './image-processor-protocol';
 import type { ImagePreparationProgress } from '../model/files';
+import { ProcessingBlobsRepository } from '../storage/processing-blobs-store';
 
 const documentPath = 'processor-document.html';
 const heartbeatMs = 20_000;
@@ -14,10 +15,11 @@ export class ProcessorHost {
   private active?: { token: string; reject(error: Error): void };
   private opening?: Promise<void>;
   private chain: Promise<unknown> = Promise.resolve();
-  constructor(private readonly store: (message: ImagePreparationJob, blob: Blob) => Promise<void>,
-    private readonly progressed: (token: string, value: ImagePreparationProgress) => void) {}
+  private readonly blobs = new ProcessingBlobsRepository();
+  private initialized?: Promise<void>;
 
-  async run(message: ImagePreparationJob, original: Blob, signal: AbortSignal): Promise<number> {
+  async run(message: ImagePreparationJob, original: Blob, signal: AbortSignal,
+    progressed: (token: string, value: ImagePreparationProgress) => void): Promise<Blob> {
     const work = this.chain.then(async () => {
       signal.throwIfAborted();
       const cancel = () => this.cancel(message.token, new Error('Image preparation cancelled.'));
@@ -29,7 +31,7 @@ export class ProcessorHost {
           const blob = await new Promise<Blob>((resolve, reject) => {
             this.active = { token: message.token, reject };
             worker.onmessage = (event: MessageEvent<{ blob: Blob; error?: string; progress?: ImagePreparationProgress }>) => {
-              if (event.data.progress) this.progressed(message.token, event.data.progress);
+              if (event.data.progress) progressed(message.token, event.data.progress);
               else if (event.data.error) reject(new Error(event.data.error));
               else resolve(event.data.blob);
             };
@@ -37,9 +39,11 @@ export class ProcessorHost {
             worker.postMessage({ blob: original, part: message.part });
           });
           signal.throwIfAborted();
-          await this.store(message, blob);
-          return blob.size;
+          return blob;
         }
+        await (this.initialized ??= this.blobs.clear());
+        await this.blobs.put(message.token, original);
+        signal.throwIfAborted();
         const port = await this.connect(signal);
         this.port = port;
         signal.throwIfAborted();
@@ -47,17 +51,21 @@ export class ProcessorHost {
           try { port.postMessage({ type: 'image-processor:heartbeat' }); }
           catch { this.cancel(message.token, new Error(failedError)); }
         }, heartbeatMs);
-        return await new Promise<number>((resolve, reject) => {
+        await new Promise<void>((resolve, reject) => {
           this.active = { token: message.token, reject };
           port.onDisconnect.addListener(() => reject(new Error(failedError)));
           port.onMessage.addListener((notice: ImageProcessorNotice) => {
             if (notice.token !== message.token) return;
-            if (notice.type === 'image-processor:progress') this.progressed(notice.token, notice.value);
+            if (notice.type === 'image-processor:progress') progressed(notice.token, notice.value);
             else if (notice.error) reject(new Error(notice.error));
-            else resolve(notice.bytes!);
+            else resolve();
           });
           port.postMessage({ type: 'image-processor:run', job: message });
         });
+        signal.throwIfAborted();
+        const blob = await this.blobs.get(message.token);
+        if (!blob) throw new Error(failedError);
+        return blob;
       } finally {
         clearInterval(heartbeat);
         signal.removeEventListener('abort', cancel);
@@ -67,6 +75,7 @@ export class ProcessorHost {
         if (__CHROMIUM__) {
           try { if (await chrome.offscreen.hasDocument()) await chrome.offscreen.closeDocument(); }
           catch { console.warn('[CtrlEm DB] Could not release the image processor.'); }
+          await this.blobs.remove(message.token);
         }
       }
     });

@@ -6,5 +6,7 @@ export interface MediaSettingsPort {
   save(settings: MediaSettings): Promise<MediaSettings>;
   loadComposer(): Promise<MediaComposerPreferences>;
   saveComposer(preferences: MediaComposerPreferences): Promise<MediaComposerPreferences>;
+  subscribeComposer(listener: (preferences: MediaComposerPreferences) => void): () => void;
   recipients(kind: MediaRecipient['kind'], query: string): Promise<MediaRecipient[]>;
+  profileHtml(code: string): Promise<string>;
 }

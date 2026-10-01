@@ -5,6 +5,7 @@ import { MediaController } from './ui/media-controller';
 import { ExtensionMediaSettingsClient } from './adapters/extension-media-settings-client';
 import { mediaEnabledOn, type MediaSettings } from './domain/media-settings';
 import './media-content.css';
+import '../ui/info-tip.css';
 import { ExtensionMediaLibraryClient } from './adapters/extension-media-library-client';
 
 const runtime = globalThis as typeof globalThis & {
@@ -17,7 +18,7 @@ const render = (value: MediaSettings) => {
   runtime.ctrlEmMediaController = undefined;
   if (!mediaEnabledOn(value, document.location.href)) return;
   const controller = new MediaController(document, new ExtensionMediaClient(), settings,
-    new ExtensionMediaLibraryClient(), value.showWallpaper, new DiscordMediaSource(), new HtmlMediaSource());
+    new ExtensionMediaLibraryClient(), new DiscordMediaSource(), new HtmlMediaSource());
   runtime.ctrlEmMediaController = controller; controller.start();
 };
 runtime.ctrlEmMediaController?.dispose();

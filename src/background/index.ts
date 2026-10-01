@@ -14,6 +14,7 @@ import { uploadPortName, uploadReadyRequest } from '../shared/upload-protocol';
 import { diagnosticUploadFetch } from './upload-network';
 import { catboxAccess } from '../shared/provider-access';
 import { registerAutoSend } from './auto-send-runtime';
+import { registerWebsiteAccessOnboarding } from './website-access-runtime';
 import { registerImageCache } from './image-cache-runtime';
 import { imageCachePort } from '../shared/image-cache-protocol';
 import { IntervalRepository } from '../storage/interval-store';
@@ -25,16 +26,31 @@ import { registerMediaSettings } from './media-settings-runtime';
 import { registerRemoteMediaLibrary } from './remote-media-library-runtime';
 import { remoteMediaUploadPort } from '../shared/media-library-protocol';
 import { imageProcessorPort } from '../files/image-processor-protocol';
+import { NativeImageService } from '../uploads/native-image-service';
+import { UploadOwnershipRepository } from '../storage/upload-ownership-store';
+import { CtrlemUploadsAdapter } from '../uploads/adapters/ctrlem-uploads';
+import { AutoSendRepository } from '../storage/auto-send-store';
+import { protectedUploadSources } from '../uploads/domain/protected-uploads';
+import { MediaDeliveryService } from '../media/media-delivery-service';
+import { downloadRemoteMediaFile } from '../media/adapters/remote-media-reader';
+import { providers } from '../upload/providers';
 
 const libraryQueue = new WriteQueue();
-const files = createFilesService();
+const images = new NativeImageService(new CtrlemUploadsAdapter(), new UploadOwnershipRepository(chrome.storage.local),
+  async () => protectedUploadSources(await new AutoSendRepository(chrome.storage.session).read()));
+const files = createFilesService(images);
+const delivery = new MediaDeliveryService(images, {
+  download: (resource, signal) => downloadRemoteMediaFile(resource, fetch, signal, () => {}, providers.imgbb.maxBytes),
+  prepare: (blob, signal) => files.processor.run({ token: crypto.randomUUID(), part: 'prepared' }, blob, signal, () => {}),
+});
 const scheduler = registerAutoSend(libraryQueue, files);
 const mediaSettings = registerMediaSettings();
-registerMediaSend(scheduler, mediaSettings.settings);
+registerMediaSend(scheduler, mediaSettings.settings, delivery);
 registerFiles(files, () => scheduler.clearFiles(), id => scheduler.removeFile(id, () => files.remove(id)));
 registerImageCache();
 registerRedgifs();
 registerRedgifsAdblock();
+registerWebsiteAccessOnboarding(chrome.permissions, chrome.runtime, () => void chrome.runtime.openOptionsPage());
 
 const credentials = new CredentialsRepository(chrome.storage.local, openCredentialKey);
 const credentialsQueue = new WriteQueue();

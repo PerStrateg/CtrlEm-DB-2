@@ -2,9 +2,13 @@ import type { MediaAttachmentSourcePort, MediaSourcePort } from '../ports/media-
 import type { MediaSendPort } from '../ports/media-send-port';
 import type { MediaSettingsPort } from '../ports/media-settings-port';
 import type { MediaLibraryPort } from '../ports/media-library-port';
-import type { MediaResource } from '../domain/media-resource';
+import type { MediaAction, MediaResource } from '../domain/media-resource';
 import { MediaActionBar } from './media-action-bar';
-import { MediaComposer } from './media-composer';
+import { mountInfoTips } from '../../ui/info-tip';
+import { MediaPopoverHost } from './media-popover';
+import { MediaPreferencesStore } from './media-preferences';
+import { MediaRecipientsPopover } from './media-recipients-popover';
+import { MediaSavePopover } from './media-save-popover';
 
 interface MountedMedia {
   key: string;
@@ -12,22 +16,33 @@ interface MountedMedia {
   element: HTMLElement;
   bar: MediaActionBar;
 }
+const toastDurationMs = 2200, closeAnimationMs = 140;
 
+/** One page owner: mounted bars, quick send, the single popover, and page-wide composer preferences. */
 export class MediaController {
   private readonly mounted = new Map<string, MountedMedia>();
   private hover?: MediaActionBar;
   private observer?: MutationObserver;
   private scheduled = false;
   private readonly pendingRoots = new Set<HTMLElement>();
-  private readonly composer: MediaComposer;
+  private readonly popover: MediaPopoverHost;
+  private readonly preferences: MediaPreferencesStore;
+  private settingsPopover?: MediaRecipientsPopover;
+  private savePopover?: MediaSavePopover;
+  private sending = false;
+  private disposed = false;
+  private stopInfoTips?: () => void;
 
   constructor(private readonly document: Document, private readonly sender: MediaSendPort,
-    settings: MediaSettingsPort, library: MediaLibraryPort, showWallpaper: boolean,
+    private readonly settings: MediaSettingsPort, private readonly library: MediaLibraryPort,
     private readonly attachments: MediaAttachmentSourcePort, private readonly generic: MediaSourcePort) {
-    this.composer = new MediaComposer(document, settings, sender, library, showWallpaper);
+    this.preferences = new MediaPreferencesStore(settings, () => this.reflectRecipients());
+    this.popover = new MediaPopoverHost(document);
   }
 
   start(): void {
+    this.stopInfoTips = mountInfoTips(this.document);
+    void this.preferences.load().catch(() => { if (!this.disposed) this.toast('Couldn’t load recipients. Reload to retry.', true); });
     if (!this.attachments.appliesTo(this.document)) {
       this.document.addEventListener('pointerover', this.hoverMedia, true);
       this.document.addEventListener('focusin', this.hoverMedia, true);
@@ -40,12 +55,13 @@ export class MediaController {
   }
 
   private readonly hoverMedia = (event: Event) => {
-    if (!(event.target instanceof this.document.defaultView!.Element) || this.hover?.element.contains(event.target)) return;
+    if (!(event.target instanceof this.document.defaultView!.Element) || this.hover?.element.contains(event.target) ||
+      event.target.closest('.ctrlem-popover, .ctrlem-db-tooltip')) return;
     const target = this.generic.resolve(event.target);
     if (!target) return this.hideHover();
     if (!this.hover || this.hover.element.dataset.kind !== target.resource.kind) {
       this.hover?.remove();
-      this.hover = new MediaActionBar(this.document, target.resource, this.openComposer);
+      this.hover = this.createBar(target.resource);
       this.hover.element.dataset.kind = target.resource.kind;
       this.hover.element.classList.add('ctrlem-media-actions-floating');
     } else this.hover.set(target.resource);
@@ -55,7 +71,7 @@ export class MediaController {
     this.hover.element.style.top = `${Math.min(window.innerHeight, Math.max(0, rect.bottom))}px`;
     if (!this.hover.element.isConnected) this.document.body.append(this.hover.element);
   };
-  private readonly hideHover = () => this.hover?.element.remove();
+  private readonly hideHover = () => { if (!this.popover.isOpen) this.hover?.element.remove(); };
 
   private schedule(records: MutationRecord[]): void {
     for (const root of this.attachments.rootsFor(records)) this.pendingRoots.add(root);
@@ -84,7 +100,7 @@ export class MediaController {
       found.add(target.key);
       const current = this.mounted.get(target.key);
       if (current?.element !== target.element) this.detach(current);
-      const bar = current?.bar ?? new MediaActionBar(this.document, target.resource, this.openComposer);
+      const bar = current?.bar ?? this.createBar(target.resource);
       bar.set(target.resource);
       target.element.classList.add('ctrlem-media-host');
       if (bar.element.parentElement !== target.element) {
@@ -100,22 +116,95 @@ export class MediaController {
     }
   }
 
+  private createBar(resource: MediaResource): MediaActionBar {
+    const bar = new MediaActionBar(this.document, resource, {
+      send: (action, current) => void this.quickSend(current, action),
+      openSettings: anchor => this.openRecipients(anchor),
+      openSave: (anchor, current) => this.openSave(anchor, current),
+    });
+    bar.applyRecipients(this.preferences.recipientNames);
+    bar.setSending(this.sending);
+    return bar;
+  }
+
+  private openRecipients(anchor: HTMLElement): void {
+    const panel = this.popover.show(anchor, 'Recipients', 'ctrlem-recipients');
+    this.settingsPopover = new MediaRecipientsPopover(this.document, panel,
+      (kind, query) => this.settings.recipients(kind, query), this.preferences);
+    this.popover.bindCleanup(() => { this.settingsPopover?.dispose(); this.settingsPopover = undefined; });
+    panel.querySelector<HTMLButtonElement>('[data-disclosure]')!.focus();
+  }
+
+  private openSave(anchor: HTMLElement, resource: MediaResource): void {
+    const panel = this.popover.show(anchor, 'Save to library', 'ctrlem-save');
+    this.savePopover = new MediaSavePopover(this.document, panel, this.library, this.preferences);
+    this.popover.bindCleanup(() => { this.savePopover = undefined; });
+    void this.savePopover.open(resource);
+    panel.querySelector<HTMLButtonElement>('[data-close]')!.focus();
+  }
+
+  /** Quick send uses one deterministic snapshot of the resource and the persisted common recipients. */
+  private async quickSend(resource: MediaResource, action: MediaAction): Promise<void> {
+    if (this.sending) return;
+    this.setSending(true);
+    this.toast('Sending…');
+    const intent = { resource: { ...resource }, action };
+    const targets = this.preferences.current?.selectedRecipients.map(recipient => ({ ...recipient }));
+    try {
+      await this.preferences.flush();
+      if (this.disposed || !targets?.length) return;
+      const result = await this.sender.send(intent, targets);
+      this.toast(result.failed ? `Sent ${result.sent}, failed ${result.failed}` : `Sent to ${result.sent}`);
+    } catch (error) {
+      this.toast(error instanceof Error ? error.message : 'Couldn’t send.', true);
+    } finally { this.setSending(false); }
+  }
+
+  private setSending(value: boolean): void {
+    this.sending = value;
+    for (const entry of this.mounted.values()) entry.bar.setSending(value);
+    this.hover?.setSending(value);
+  }
+
+  private reflectRecipients(): void {
+    const names = this.preferences.recipientNames;
+    for (const entry of this.mounted.values()) entry.bar.applyRecipients(names);
+    this.hover?.applyRecipients(names);
+    this.settingsPopover?.refresh();
+    this.savePopover?.refresh();
+  }
+
   private detach(entry: MountedMedia | undefined): void {
     if (!entry) return;
     entry.element.classList.remove('ctrlem-media-host');
     entry.bar.remove();
   }
 
+  private toast(message: string, error = false): void {
+    if (this.disposed) return;
+    const toast = this.document.createElement('div');
+    toast.className = `ctrlem-toast${error ? ' error' : ''}`;
+    toast.textContent = message;
+    toast.setAttribute('role', 'status');
+    this.document.body.append(toast);
+    this.document.defaultView!.setTimeout(() => {
+      toast.classList.add('closing');
+      this.document.defaultView!.setTimeout(() => toast.remove(), closeAnimationMs);
+    }, toastDurationMs);
+  }
+
   dispose(): void {
+    this.disposed = true;
+    this.preferences.dispose();
+    this.stopInfoTips?.();
     this.observer?.disconnect();
     this.document.removeEventListener('pointerover', this.hoverMedia, true);
     this.document.removeEventListener('focusin', this.hoverMedia, true);
     this.document.defaultView!.removeEventListener('scroll', this.hideHover, true);
-    this.composer.dispose();
+    this.popover.dismiss();
+    this.settingsPopover = undefined; this.savePopover = undefined;
     this.hover?.remove();
     for (const entry of this.mounted.values()) this.detach(entry);
     this.mounted.clear();
   }
-
-  private readonly openComposer = (resource: MediaResource, anchor: HTMLElement) => { void this.composer.open(resource, anchor); };
 }

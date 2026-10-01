@@ -1,16 +1,16 @@
-import { CtrlemUploadsAdapter } from '../uploads/adapters/ctrlem-uploads';
+import type { NativeImageService } from '../uploads/native-image-service';
 import { filesPort, filesRequest, filesTransfer } from '../shared/files-protocol';
 import { filesPolicy } from '../model/files';
 import type { FilePart } from '../model/files';
 import { authorizedTab } from './library-service';
 import { FilesService } from './files-service';
 
-export function createFilesService(): FilesService {
+export function createFilesService(images: NativeImageService): FilesService {
   const publish = (message: unknown) => {
     void chrome.tabs.query({ url: ['https://ctrlem.com/u/*', 'https://ctrlem.com/groups/*'] }).then(tabs => Promise.all(tabs.map(tab =>
       tab.id === undefined ? undefined : chrome.tabs.sendMessage(tab.id, message, { frameId: 0 }).catch(() => {}))));
   };
-  return new FilesService(() => publish({ type: 'files:changed' }), snapshot => publish({ type: 'files:progress', ...snapshot }), new CtrlemUploadsAdapter());
+  return new FilesService(() => publish({ type: 'files:changed' }), snapshot => publish({ type: 'files:progress', ...snapshot }), images);
 }
 
 export function registerFiles(service: FilesService, clearQueue: () => Promise<void>, removeFile: (id: string) => Promise<void>): void {

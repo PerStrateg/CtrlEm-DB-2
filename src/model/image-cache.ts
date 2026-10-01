@@ -1,4 +1,5 @@
-export const imageCacheAccess = { origins: ['http://*/*', 'https://*/*'] };
+import { websiteAccess } from '../shared/website-access';
+export const imageCacheAccess = websiteAccess;
 export const imageCacheLimits = [256, 512, 1024, 2048, 5120, 10240] as const;
 export const imageCacheDefaultBytes = 1024 ** 3;
 export const imageCacheConcurrency = 4;
