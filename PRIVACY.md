@@ -1,6 +1,6 @@
 # Ctrlem DB privacy policy
 
-Version 2.0.3 | Strateg | October 1, 2026
+Version 2.1.0 | Strateg | October 1, 2026
 
 Ctrlem DB contains no analytics or telemetry and does not send user data to its developer. Your library and settings are stored locally in your browser profile. The extension does not use browser sync for this data.
 
