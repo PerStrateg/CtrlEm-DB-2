@@ -15,9 +15,17 @@ const groupsPageSchema = z.object({
   groups: page.groups,
   pagination: page.pagination ?? { page: 1, totalPages: page.groups.length ? 1 : 0 },
 }));
+const friendUserSchema = z.object({
+  id: z.string().min(1), username: z.string().min(1),
+});
 const friendSchema = z.union([
-  z.object({ user: z.object({ id: z.string().min(1), username: z.string().min(1) }).loose() }).loose(),
-  z.object({ id: z.string().min(1), username: z.string().min(1) }).loose(),
+  z.object({ user: friendUserSchema }),
+  friendUserSchema,
+]);
+const usersPayloadSchema = z.union([
+  z.array(z.unknown()),
+  z.object({ users: z.array(z.unknown()) }),
+  z.object({ results: z.array(z.unknown()) }),
 ]);
 const userRecordSchema = z.object({
   id: z.string().min(1), username: z.string().min(1),
@@ -31,15 +39,13 @@ const userRecordSchema = z.object({
 type ParsedUser = z.infer<typeof userRecordSchema>;
 
 const parseUsersPayload = (json: unknown): ParsedUser[] => {
-  const wrapped = z.union([
-    z.array(z.unknown()),
-    z.object({ users: z.array(z.unknown()) }).loose(),
-    z.object({ results: z.array(z.unknown()) }).loose(),
-  ]).safeParse(json);
+  const wrapped = usersPayloadSchema.safeParse(json);
   if (!wrapped.success) return [];
-  const rows = Array.isArray(wrapped.data) ? wrapped.data
-    : 'users' in wrapped.data ? wrapped.data.users : wrapped.data.results;
-  return rows.flatMap(row => {
+  let rows: unknown[];
+  if (Array.isArray(wrapped.data)) rows = wrapped.data;
+  else if ('users' in wrapped.data) rows = wrapped.data.users;
+  else rows = wrapped.data.results;
+  return rows.flatMap((row: unknown) => {
     const parsed = userRecordSchema.safeParse(row);
     return parsed.success ? [parsed.data] : [];
   });
@@ -50,6 +56,11 @@ const recipientFromUser = (user: ParsedUser): MediaRecipient | null => {
   if (!receiver) return null;
   return { receiver, kind: 'user', label: user.username };
 };
+
+type ParsedFriend = z.infer<typeof friendSchema>;
+type FriendUser = z.infer<typeof friendUserSchema>;
+const friendUser = (entry: ParsedFriend): FriendUser =>
+  'user' in entry ? entry.user : entry;
 
 export type RecipientDirectoryReporter = (event: {
   event: 'start' | 'success' | 'failure'; source: 'groups' | 'friends'; status?: number; count?: number;
@@ -100,8 +111,7 @@ export class CtrlemRecipientDirectoryAdapter implements RecipientDirectoryPort {
       const request = this.request;
       const response = await request('https://ctrlem.com/api/friends', requestInit());
       if (!response.ok) throw new ResponseError(response.status);
-      const friends = z.array(friendSchema).parse(await response.json())
-        .map(entry => 'user' in entry ? entry.user : entry);
+      const friends = z.array(friendSchema).parse(await response.json()).map(friendUser);
       const users = await Promise.all(friends.map(friend => this.findUser(friend.id, friend.username)));
       const recipients = users.flatMap(user => {
         if (!user) return [];
