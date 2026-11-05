@@ -111,7 +111,7 @@ export class FilesService implements FilesSource {
       signal.throwIfAborted();
       const blob = await this.repository.get(id, 'prepared');
       if (!blob) throw new Error('The image has not been prepared.');
-      if (!blob.size || blob.size > filesPolicy.maxUploadBytes) throw new Error('This image could not fit the upload limit.');
+      if (!blob.size || blob.size > this.host.maxUploadBytes) throw new Error('This image could not fit the upload limit.');
       const extension = blob.type === 'image/jpeg' ? 'jpg' : blob.type.split('/')[1];
       const url = await this.host.uploadImage(blob, `${item.name.replace(/\.[^.]+$/, '')}.${extension}`, signal);
       await this.writes.run(() => this.repository.update(current => {

@@ -1,4 +1,5 @@
 export const filesPolicy = {
+  /** CtrlEm gallery and website-image preparation target; Local Upload uses each host’s maxUploadBytes. */
   maxUploadBytes: 4.5 * 1024 * 1024, capacity: 20, thumbnailSize: 256,
   cardSize: 128, gap: 10, overscanRows: 2, chunkBytes: 512 * 1024,
   processTimeoutMs: 5 * 60_000, progressIntervalMs: 100,
