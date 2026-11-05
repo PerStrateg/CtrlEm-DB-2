@@ -8,6 +8,8 @@ import type { ProviderId } from '../upload/providers';
 import type { Credentials } from '../shared/credentials-protocol';
 import type { MediaKind } from '../media/domain/media-resource';
 import { downloadRemoteMediaFile } from '../media/adapters/remote-media-reader';
+import { UploadError } from '../shared/upload-errors';
+import { catboxAccess } from '../shared/provider-access';
 
 
 export function registerRemoteMediaLibrary(library: LibraryRepository, queue: WriteQueue,
@@ -44,7 +46,16 @@ async function save(input: unknown, library: LibraryRepository, queue: WriteQueu
   const progress = (value: object) => post({ type: 'progress', value });
   const file = uploadedUrl ? undefined : await downloadRemoteMedia(resource, request, signal, progress, providers[provider].maxBytes);
   if (file) { const invalid = uploadFileError(provider, resource.kind, file); if (invalid) throw new Error(invalid); }
-  const keys: Credentials = { imgbb: resource.kind === 'image' ? await credentials.readField('imgbb') : '', catbox: '' };
+  if (provider === 'catbox' && !uploadedUrl) {
+    let allowed: boolean;
+    try { allowed = await chrome.permissions.contains(catboxAccess); }
+    catch { throw new UploadError({ stage: 'access', code: 'unavailable' }); }
+    if (!allowed) throw new UploadError({ stage: 'access', code: 'unavailable' });
+  }
+  const keys: Credentials = {
+    imgbb: resource.kind === 'image' ? await credentials.readField('imgbb') : '',
+    catbox: resource.kind === 'image' ? '' : await credentials.readField('catbox'),
+  };
   // The external upload is published before the library write, so a later retry resumes from it.
   const url = uploadedUrl ?? await externalUpload(provider, file!, keys, signal, request, progress);
   const label = file?.name ?? uploadedLabel ?? '';
@@ -69,6 +80,7 @@ export function downloadRemoteMedia(resource: { url: string; kind: MediaKind }, 
 function webSender(sender?: chrome.runtime.MessageSender): boolean { try { return sender?.id === chrome.runtime.id && sender.tab?.id !== undefined && ['http:', 'https:'].includes(new URL(sender.url!).protocol); } catch { return false; } }
 function publicError(error: unknown): string {
   const message = error instanceof Error ? error.message : '';
+  if (error instanceof UploadError) return error.message;
   if (message === 'size') return 'This media is too large.';
   if (message === 'category') return 'Choose an existing category.';
   if (message === 'download' || message === 'html') return 'Couldn’t read this file from the site. Use a direct link to the file.';

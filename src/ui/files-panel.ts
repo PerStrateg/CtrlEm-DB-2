@@ -49,7 +49,7 @@ export class FilesPanel {
     }
     const clear = doc.createElement('button'); clear.type = 'button'; clear.textContent = 'Clear all';
     this.confirmation = new ConfirmButton(clear, {
-      request: () => this.confirmation.arm('Clear local files and cancel Local Upload tasks? CtrlEm uploads will remain.'),
+      request: () => this.confirmation.arm('Clear local files and cancel Local Upload tasks? Hosted copies stay until they expire.'),
       confirm: () => { this.confirmation.reset(); this.cancelDrop(); actions.clear(); },
     });
     this.previews = doc.createElement('input'); this.previews.type = 'checkbox';
@@ -73,7 +73,7 @@ export class FilesPanel {
     const formats = doc.createElement('p'); formats.textContent = 'JPG, PNG, GIF, WebP. Large files resize automatically.';
     formats.append(doc.createElement('br'), 'Files here aren’t saved to the library due to CtrlEm limitations.');
     const illustration = doc.createElement('img'); illustration.className = 'ctrlem-db-files-illustration';
-    illustration.src = localUploadIllustration; illustration.alt = 'CtrlEm keeps up to 20 uploaded files for sending.'; illustration.draggable = false;
+    illustration.src = localUploadIllustration; illustration.alt = 'Local images are hosted temporarily, then sent through CtrlEm.'; illustration.draggable = false;
     this.empty.append(formats, illustration);
     this.grid = new FilesGrid(doc, actions.select, actions.remove);
     this.dropzone = doc.createElement('div'); this.dropzone.className = 'ctrlem-db-files-dropzone';

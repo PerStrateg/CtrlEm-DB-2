@@ -29,6 +29,8 @@ import { imageProcessorPort } from '../files/image-processor-protocol';
 import { NativeImageService } from '../uploads/native-image-service';
 import { UploadOwnershipRepository } from '../storage/upload-ownership-store';
 import { CtrlemUploadsAdapter } from '../uploads/adapters/ctrlem-uploads';
+import { HostedImageChain } from '../uploads/adapters/hosted-image-chain';
+import { TmperUploadAdapter } from '../uploads/adapters/tmper-upload';
 import { AutoSendRepository } from '../storage/auto-send-store';
 import { protectedUploadSources } from '../uploads/domain/protected-uploads';
 import { MediaDeliveryService } from '../media/media-delivery-service';
@@ -38,7 +40,7 @@ import { providers } from '../upload/providers';
 const libraryQueue = new WriteQueue();
 const images = new NativeImageService(new CtrlemUploadsAdapter(), new UploadOwnershipRepository(chrome.storage.local),
   async () => protectedUploadSources(await new AutoSendRepository(chrome.storage.session).read()));
-const files = createFilesService(images);
+const files = createFilesService(new HostedImageChain([new TmperUploadAdapter()]));
 const delivery = new MediaDeliveryService(images, {
   download: (resource, signal) => downloadRemoteMediaFile(resource, fetch, signal, () => {}, providers.imgbb.maxBytes),
   prepare: (blob, signal) => files.processor.run({ token: crypto.randomUUID(), part: 'prepared' }, blob, signal, () => {}),

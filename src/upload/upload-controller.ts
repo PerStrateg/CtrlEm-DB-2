@@ -78,7 +78,7 @@ export class UploadController {
             this.pending.push({ state: current, row }); this.render(); void this.drain();
           },
           settings: initiator => {
-            if (type === 'sound') {
+            if (type === 'sound' || type === 'video') {
               void this.client.openAccessSettings?.().catch(() => {
                 this.accessError = 'Couldn’t open provider settings. Retry loading, then enable access again.';
                 this.render();
@@ -116,12 +116,12 @@ export class UploadController {
     for (const state of this.states.values()) {
       const context = this.picker.context(state.key);
       const image = state.view.type === 'image';
-      const sound = state.view.type === 'sound';
-      const needsAccess = sound && !this.loadingAccess && !this.accessError && !this.catboxAllowed;
+      const catbox = state.view.type === 'sound' || state.view.type === 'video';
+      const needsAccess = catbox && !this.loadingAccess && !this.accessError && !this.catboxAllowed;
       this.page.setCustomUpload(state.key, Boolean(context.category));
-      state.view.render(state.rows, context.category?.id, context.loading || (image && this.loadingSettings) || (sound && this.loadingAccess),
-        context.loadError ? 'Couldn’t load library. Use Retry in the picker.' : image ? this.settingsError : sound ?
-          this.accessError || (needsAccess ? 'Allow Catbox access to upload audio.' : '') : '',
+      state.view.render(state.rows, context.category?.id, context.loading || (image && this.loadingSettings) || (catbox && this.loadingAccess),
+        context.loadError ? 'Couldn’t load library. Use Retry in the picker.' : image ? this.settingsError : catbox ?
+          this.accessError || (needsAccess ? 'Allow Catbox access to upload.' : '') : '',
         image && !this.loadingSettings && !this.settingsError && !this.hasImgBBKey, needsAccess);
     }
   }
@@ -129,7 +129,7 @@ export class UploadController {
     const context = this.picker.context(state.key);
     if (!context.category || context.loading || context.loadError) return;
     if (state.view.type === 'image' && (this.loadingSettings || this.settingsError)) return;
-    if (state.view.type === 'sound' && (this.loadingAccess || this.accessError || !this.catboxAllowed)) return;
+    if ((state.view.type === 'sound' || state.view.type === 'video') && (this.loadingAccess || this.accessError || !this.catboxAllowed)) return;
     const provider = providerForType[state.view.type];
     for (const file of files) {
       const error = uploadFileError(provider, state.view.type, file);

@@ -11,7 +11,7 @@ export const filesAccept = '.jpg,.jpeg,.png,.gif,.webp,.bmp,.avif,.tif,.tiff';
 export type FilePart = 'original' | 'preview' | 'prepared';
 export interface LocalImage {
   id: string; name: string; path: string; mime: string; size: number; order: number;
-  uploadId?: string; animated?: boolean;
+  hostedUrl?: string; animated?: boolean;
 }
 export interface FilesSnapshot { generation: string; items: LocalImage[]; previews: boolean; interval: number; selected?: string }
 export interface NativeUpload { id: string; originalName: string; mimeType: string; fileSize: number; createdAt: string; url: string }

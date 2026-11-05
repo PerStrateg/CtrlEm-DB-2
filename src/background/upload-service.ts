@@ -44,10 +44,8 @@ export class UploadSession {
           if (!allowed) throw new UploadError({ stage: 'access', code: 'unavailable' });
         }
         const credentials = { imgbb: '', catbox: '' };
-        if (provider !== 'vidhosting') {
-          try { credentials[provider] = await this.credentials.readField(provider); }
-          catch { throw new UploadError({ stage: 'settings', code: 'unavailable' }); }
-        }
+        try { credentials[provider] = await this.credentials.readField(provider); }
+        catch { throw new UploadError({ stage: 'settings', code: 'unavailable' }); }
         const url = await uploadFile(this.metadata.provider, file, credentials, this.abort.signal, this.request);
         this.closed = true;
         return { ok: true, url };

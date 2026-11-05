@@ -2,13 +2,12 @@ import { UploadError } from '../shared/upload-errors';
 import type { Credentials } from '../shared/credentials-protocol';
 
 export type UploadType = 'image' | 'sound' | 'video';
-export type ProviderId = 'imgbb' | 'catbox' | 'vidhosting';
-export const providerForType: Record<UploadType, ProviderId> = { image: 'imgbb', sound: 'catbox', video: 'vidhosting' };
+export type ProviderId = 'imgbb' | 'catbox';
+export const providerForType: Record<UploadType, ProviderId> = { image: 'imgbb', sound: 'catbox', video: 'catbox' };
 // Verified against api.imgbb.com, catbox.moe/tools.php and catbox.moe on 2026-09-25.
 export const providers = {
   imgbb: { label: 'ImgBB', types: ['image'], maxBytes: 32 * 1024 * 1024, endpoint: 'https://api.imgbb.com/1/upload', requiredKey: false },
-  catbox: { label: 'Catbox', types: ['sound'], maxBytes: 200 * 1024 * 1024, endpoint: 'https://catbox.moe/user/api.php', requiredKey: false },
-  vidhosting: { label: 'VidHosting', types: ['video'], maxBytes: 100 * 1024 * 1024, endpoint: 'https://upload.vidhosting.in/', requiredKey: false },
+  catbox: { label: 'Catbox', types: ['sound', 'video'], maxBytes: 200 * 1024 * 1024, endpoint: 'https://catbox.moe/user/api.php', requiredKey: false },
 } satisfies Record<ProviderId, { label: string; types: UploadType[]; maxBytes: number; endpoint: string; requiredKey: boolean }>;
 
 export const imgbbAnonymous = { page: 'https://imgbb.com/', endpoint: 'https://imgbb.com/json' };
@@ -47,12 +46,10 @@ export async function uploadFile(provider: ProviderId, file: File, credentials: 
   } else if (provider === 'imgbb') {
     body.set('key', credentials.imgbb);
     body.set('image', file);
-  } else if (provider === 'catbox') {
+  } else {
     body.set('reqtype', 'fileupload');
     if (credentials.catbox) body.set('userhash', credentials.catbox);
     body.set('fileToUpload', file);
-  } else {
-    body.set('file', file);
   }
   let response: Response;
   try { response = await request(anonymous ? imgbbAnonymous.endpoint : providers[provider].endpoint, { method: 'POST', body, signal, credentials: 'omit', redirect: 'error' }); }
@@ -66,16 +63,14 @@ export async function uploadFile(provider: ProviderId, file: File, credentials: 
     if (provider === 'catbox') value = (await response.text()).trim();
     else {
       const result = await response.json();
-      if (provider === 'vidhosting' && result.success !== true) throw new Error('Upload failed.');
       if (anonymous && result.status_code !== 200) throw new Error('ImgBB anonymous upload failed.');
-      value = provider === 'imgbb' ? (anonymous ? result.image?.url : result.data?.url) : result.url;
+      value = anonymous ? result.image?.url : result.data?.url;
     }
     // Never forward a provider error body (which could include a credential) as a URL.
     if (typeof value !== 'string') throw new Error('Provider did not return a link.');
     const url = new URL(value);
-    const host = { catbox: 'files.catbox.moe', imgbb: 'i.ibb.co', vidhosting: 'stream.vidhosting.in' }[provider];
+    const host = { catbox: 'files.catbox.moe', imgbb: 'i.ibb.co' }[provider];
     if (url.protocol !== 'https:' || url.hostname !== host || url.username || url.password) throw new Error('Provider did not return a direct link.');
-    if (provider === 'vidhosting' && !url.pathname.startsWith('/videos/')) url.pathname = `/videos${url.pathname}`;
     return url.href;
   } catch { throw new UploadError({ stage: 'response', code: 'invalid-response', anonymous }); }
 }

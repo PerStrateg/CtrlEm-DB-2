@@ -1,8 +1,8 @@
 import { CtrlEmPage, type ResultsMount } from '../site/ctrlem-page';
-import { CommandFields } from '../site/command-fields';
+import type { CommandFields } from '../site/command-fields';
 import { ResultsController } from '../ui/results-controller';
 import { FilesPanel } from '../ui/files-panel';
-import { FilesClient, filesRequestValue, readFiles, readGallery } from './files-client';
+import { FilesClient, filesRequestValue, readFiles } from './files-client';
 import { initialFiles } from '../model/files';
 import type { FilesProgressSnapshot, FilesSnapshot } from '../model/files';
 import { ExtensionAutoClient } from '../auto-send/extension-auto-client';
@@ -27,12 +27,11 @@ export class FilesController {
   private mount?: ResultsMount;
   private target?: HTMLElement;
   private readonly cleanups: (() => void)[] = [];
-  private galleryPending = false;
   private refreshTimer?: ReturnType<typeof setTimeout>;
   private importGeneration = 0;
   private queueError?: string;
   constructor(private readonly page: CtrlEmPage, private readonly results: ResultsController,
-    private readonly fields: CommandFields, private readonly sender: AutoSendPage) {
+    _fields: CommandFields, private readonly sender: AutoSendPage) {
     this.ui = new FilesPanel(page.document, {
       toggle: () => results.select(this.open ? 'site' : 'files'),
       close: () => { results.select('site'); this.ui.button.focus({ preventScroll: true }); },
@@ -46,7 +45,7 @@ export class FilesController {
   start(): void {
     this.cleanups.push(this.results.subscribe(view => {
       this.open = view === 'files';
-      if (this.open) { this.reconcile(); if (this.target) this.page.alignResults(this.target); void this.refreshGallery(); }
+      if (this.open) { this.reconcile(); if (this.target) this.page.alignResults(this.target); }
       else { this.mount?.dispose(); this.mount = undefined; this.target = undefined; }
       this.render();
     }), this.page.observe(() => this.reconcile()), this.auto.subscribe(snapshot => this.accept(snapshot)));
@@ -54,17 +53,15 @@ export class FilesController {
       if (sender.id !== chrome.runtime.id || sender.tab) return false;
       if (message.type === 'files:progress') { this.acceptProgress(message); return false; }
       if (message.type !== 'files:changed') return false;
-      clearTimeout(this.refreshTimer); this.refreshTimer = setTimeout(() => { void this.refresh(); void this.refreshGallery(); }, 80); return false;
+      clearTimeout(this.refreshTimer); this.refreshTimer = setTimeout(() => { void this.refresh(); }, 80); return false;
     };
     chrome.runtime.onMessage.addListener(changed);
-    const focus = () => { void this.refreshGallery(); };
     const fit = () => this.ui.element.style.setProperty('--ctrlem-db-files-height', `${this.page.redgifsHeight()}px`);
     const win = this.page.document.defaultView!;
-    win.addEventListener('focus', focus); win.addEventListener('resize', fit); win.visualViewport?.addEventListener('resize', fit);
+    win.addEventListener('resize', fit); win.visualViewport?.addEventListener('resize', fit);
     const visibility = () => this.render(); this.page.document.addEventListener('visibilitychange', visibility);
-    const timer = setInterval(() => { if (this.open && !this.page.document.hidden) void this.refreshGallery(); }, 10_000);
-    this.cleanups.push(() => { clearInterval(timer); clearTimeout(this.refreshTimer); chrome.runtime.onMessage.removeListener(changed);
-      win.removeEventListener('focus', focus); win.removeEventListener('resize', fit); win.visualViewport?.removeEventListener('resize', fit);
+    this.cleanups.push(() => { clearTimeout(this.refreshTimer); chrome.runtime.onMessage.removeListener(changed);
+      win.removeEventListener('resize', fit); win.visualViewport?.removeEventListener('resize', fit);
       this.page.document.removeEventListener('visibilitychange', visibility); });
     fit(); this.reconcile(); void this.refresh(); void this.refreshProgress();
     void this.auto.request({ type: 'auto:snapshot' }).then(snapshot => this.accept(snapshot), error => this.error(error));
@@ -110,15 +107,6 @@ export class FilesController {
   }
   private async refresh(): Promise<void> {
     try { this.state = await readFiles(); this.render(); } catch (error) { this.error(error); }
-  }
-  private async refreshGallery(): Promise<void> {
-    if (this.galleryPending || this.disposed) return; this.galleryPending = true;
-    try {
-      const gallery = await readGallery();
-      if (gallery.error) throw new Error(gallery.error);
-      this.fields.syncUploads(gallery.uploads); await this.refresh(); await this.refreshProgress();
-    } catch (error) { this.error(error); }
-    finally { this.galleryPending = false; }
   }
   private async preference(change: Partial<Pick<FilesSnapshot, 'previews' | 'interval' | 'selected'>>): Promise<void> {
     try { this.state = await filesRequestValue({ type: 'files:preferences', ...change }); this.render(); } catch (error) { this.error(error); }

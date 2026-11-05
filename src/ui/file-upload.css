@@ -10,7 +10,6 @@
 
 .ctrlem-db-upload[data-provider="imgbb"] { --upload-accent: #2a80b9; }
 .ctrlem-db-upload[data-provider="catbox"] { --upload-accent: #3F8694; }
-.ctrlem-db-upload[data-provider="vidhosting"] { --upload-accent: #F59E0B; }
 .ctrlem-db-upload .upload-dropzone,
 .ctrlem-db-upload .upload-dropzone:hover,
 .ctrlem-db-upload .upload-dropzone.drag-active { border-color: var(--upload-accent); border-style: dashed; }

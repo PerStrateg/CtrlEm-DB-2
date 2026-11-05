@@ -183,8 +183,8 @@ export class FilesGrid {
       card.wrapper.querySelector<HTMLButtonElement>('.ctrlem-db-files-remove')!
         .setAttribute('aria-label', `Remove image ${i + 1} from Local Upload`);
       card.element.setAttribute('aria-pressed', String(item.id === this.selected));
-      card.element.dataset.uploaded = String(Boolean(item.uploadId));
-      card.element.setAttribute('aria-description', item.uploadId ? 'Uploaded to CtrlEm' : 'Not uploaded to CtrlEm');
+      card.element.dataset.uploaded = String(Boolean(item.hostedUrl));
+      card.element.setAttribute('aria-description', item.hostedUrl ? 'Uploaded to host' : 'Not uploaded to host');
       card.element.classList.toggle('ctrlem-db-files-no-preview', !this.previews);
       this.renderProgress(card, item, i);
     }

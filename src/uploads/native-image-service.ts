@@ -7,7 +7,7 @@ import type { PreparedImage } from './domain/prepared-image';
 
 export const nativeUploadUrl = (upload: NativeUpload): string => new URL(upload.url, 'https://ctrlem.com').href;
 
-/** One serialized gallery transaction for local files and website images. */
+/** One serialized CtrlEm gallery transaction for website image Send. */
 export class NativeImageService {
   private readonly queue = new WriteQueue();
   private readonly active = new Map<string, number>();

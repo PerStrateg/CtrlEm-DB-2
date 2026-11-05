@@ -26,16 +26,16 @@ export function createHelpAbout(document: Document, version: string): HTMLElemen
     ]],
     ['Preview and uploads', [
       'Preview opens media without selecting or sending it. Press Escape or Preview again to close it.',
-      'Choose a category before uploading. Images use ImgBB, sounds use Catbox, and videos use VidHosting. Uploaded files are added to that category.',
+      'Choose a category before uploading. Images use ImgBB; sounds and videos use Catbox. Uploaded files are added to that category.',
       'Cancel removes an upload that has not started. Removing a result does not delete the file from the upload service. If an address remains visible, copy it before removing the result.',
     ]],
     ['Upload settings', [
-      'Open Settings to connect an upload account. An API key or userhash is a code supplied by the upload service. These fields are optional; VidHosting needs no key.',
+      'Open Settings to connect an upload account. An API key or userhash is a code supplied by the upload service. These fields are optional.',
       'If uploads need permission, choose Enable Catbox access beside the uploader, then Allow Catbox uploads on the page that opens. Return to CtrlEm when done.',
     ]],
     ['Local Upload', [
       'LU opens local images. Drag images or folders into the orange area, or use Add files / Add folder. Choose an image, then use Send (single). A sends the images in order. JPG, PNG, GIF, WebP, BMP, AVIF and TIFF are supported; large images are resized when needed.',
-      'Clear all removes the local list and cancels its queued tasks. Images already uploaded to CtrlEm remain there.',
+      'Clear all removes the local list and cancels its queued tasks. Hosted copies stay on the upload service until they expire; delete them there if you need to.',
     ]],
     ['RedGifs', [
       'RG opens the video browser inside Results. Choose a video and use its send action to add it to the queue.',

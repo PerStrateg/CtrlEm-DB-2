@@ -1,13 +1,11 @@
 import { filesPolicy } from '../model/files';
 import type { FilePart, FileProgress, FilesGallery, FilesSnapshot, FilesProgressSnapshot } from '../model/files';
 import { FilesRepository } from '../storage/files-store';
-import { NativeImageService, nativeUploadUrl } from '../uploads/native-image-service';
-import { localImageSource } from '../uploads/domain/prepared-image';
 import { WriteQueue } from '../storage/library-store';
 import { ProcessorHost } from '../files/processor-host';
-import { bounded } from '../files/request-bound';
 import { reportTabDiagnostic } from '../diagnostics/relay';
 import { classifyDiagnosticError, diagnosticMime } from '../diagnostics/session-log';
+import type { HostedImageUpload } from '../uploads/ports/hosted-image-upload-port';
 
 export interface FilesSource {
   items(): Promise<{ id: string }[]>;
@@ -25,7 +23,7 @@ export class FilesService implements FilesSource {
   private readonly progress = new Map<string, { token: string; value: FileProgress }>();
   private progressRevision = Date.now();
   constructor(private readonly changed: () => void, private readonly progressChanged: (snapshot: FilesProgressSnapshot) => void,
-    private readonly images: NativeImageService) {}
+    private readonly host: HostedImageUpload) {}
   progressSnapshot(): FilesProgressSnapshot { return { revision: this.progressRevision, items: [...this.progress.values()].map(({ value }) => value) }; }
   processProgress(token: string, progress: Omit<FileProgress, 'id' | 'stage'>): void {
     const job = this.jobs.get(token);
@@ -53,19 +51,7 @@ export class FilesService implements FilesSource {
     });
     this.changed();
   }
-  /** Reads the gallery on its own bounded request. An upload never waits behind it. */
-  async gallery(): Promise<FilesGallery> {
-    const request = bounded(filesPolicy.galleryReadMs);
-    try {
-      const uploads = await this.images.uploads.listUploads(request.signal);
-      const present = new Set(uploads.map(upload => upload.id));
-      await this.writes.run(() => this.repository.update(state => {
-        for (const item of state.items) if (item.uploadId && !present.has(item.uploadId)) delete item.uploadId;
-      }));
-      return { uploads };
-    } catch (error) { return { uploads: [], error: error instanceof Error ? error.message : 'Could not read CtrlEm uploads.' }; }
-    finally { request.dispose(); }
-  }
+  gallery(): Promise<FilesGallery> { return Promise.resolve({ uploads: [] }); }
   async blob(tabId: number, id: string, part: FilePart, signal: AbortSignal): Promise<Blob> {
     let blob = await this.repository.get(id, part);
     if (!blob && part !== 'original') { await this.process(tabId, id, part, signal); blob = await this.repository.get(id, part); }
@@ -111,22 +97,23 @@ export class FilesService implements FilesSource {
     const startedAt = performance.now();
     const state = await this.repository.read(), item = state.items.find(item => item.id === id);
     if (!item) throw new Error('File no longer available.');
+    if (item.hostedUrl) return item.hostedUrl;
     const filename = item.name, token = crypto.randomUUID();
     reportTabDiagnostic(tabId, 'files.prepare', { outcome: 'start', stage: 'upload', filename });
     this.setProgress(id, token, { id, stage: 'uploading' });
     try {
-      const uploaded = await this.images.resolve(localImageSource(id), async () => {
-        const blob = await this.repository.get(id, 'prepared');
-        if (!blob) throw new Error('The image has not been prepared.');
-        const extension = blob.type === 'image/jpeg' ? 'jpg' : blob.type.split('/')[1];
-        return { blob, name: `${item.name.replace(/\.[^.]+$/, '')}.${extension}` };
-      }, signal);
+      signal.throwIfAborted();
+      const blob = await this.repository.get(id, 'prepared');
+      if (!blob) throw new Error('The image has not been prepared.');
+      if (!blob.size || blob.size > filesPolicy.maxUploadBytes) throw new Error('This image could not fit the upload limit.');
+      const extension = blob.type === 'image/jpeg' ? 'jpg' : blob.type.split('/')[1];
+      const url = await this.host.uploadImage(blob, `${item.name.replace(/\.[^.]+$/, '')}.${extension}`, signal);
       await this.writes.run(() => this.repository.update(current => {
         if (current.generation !== state.generation) return;
         const file = current.items.find(file => file.id === id);
-        if (file) file.uploadId = uploaded.id;
+        if (file) file.hostedUrl = url;
       }));
-      this.changed(); return nativeUploadUrl(uploaded);
+      this.changed(); return url;
     } catch (error) {
       reportTabDiagnostic(tabId, 'files.prepare', { outcome: signal.aborted ? 'cancelled' : 'failed', stage: 'upload', filename,
         durationMs: performance.now() - startedAt, code: classifyDiagnosticError(error) });

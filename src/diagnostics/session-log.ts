@@ -22,7 +22,7 @@ const detailsSchema = z.object({
   width: number, height: number, frames: number, status: number, retryAfterMs: number,
   command: z.enum(commands).optional(), mime: z.enum(mimes).optional(),
   receiverKind: z.enum(['group', 'user']).optional(), requestId: z.string().uuid().optional(),
-  provider: z.enum(['imgbb', 'catbox', 'vidhosting']).optional(),
+  provider: z.enum(['imgbb', 'catbox']).optional(),
   code: z.enum(codes).optional(),
   stage: z.enum(['access', 'settings', 'page', 'token', 'upload', 'response', 'transfer', 'decode', 'resize', 'encode']).optional(),
   reason: z.enum(['unavailable', 'empty', 'failed', 'invalid', 'unknown', 'interrupted', 'busy', 'storage', 'file']).optional(),
