@@ -61,6 +61,11 @@ export class FilesService implements FilesSource {
   async prepare(tabId: number, id: string, signal: AbortSignal): Promise<void> {
     await this.blob(tabId, id, 'prepared', signal);
   }
+  private luPreparedPassthrough(original: Blob, mime: string): boolean {
+    if (mime === 'image/gif' && !filesPolicy.localUploadGifOptimization) return true;
+    if (original.size > filesPolicy.maxUploadBytes && !filesPolicy.localUploadOversizedOptimization) return true;
+    return false;
+  }
   private async process(tabId: number, id: string, part: 'preview' | 'prepared', signal: AbortSignal): Promise<void> {
     const token = crypto.randomUUID(), abort = new AbortController();
     // Register while holding the same queue as deletion: it cannot miss a new job.
@@ -80,7 +85,8 @@ export class FilesService implements FilesSource {
       if (signal.aborted) cancel();
       const original = await this.repository.get(id, 'original');
       if (!original) throw new Error('Local image is unavailable. Add it again.');
-      const blob = await this.processor.run({ token, part }, original, abort.signal, (token, value) => this.processProgress(token, value));
+      const blob = part === 'prepared' && this.luPreparedPassthrough(original, item.mime) ? original
+        : await this.processor.run({ token, part }, original, abort.signal, (token, value) => this.processProgress(token, value));
       await this.writes.run(() => this.repository.put(state.generation, id, part, blob));
       const bytes = blob.size;
       if (part === 'prepared') reportTabDiagnostic(tabId, 'files.prepare', { outcome: 'success', stage: 'encode', durationMs: performance.now() - startedAt, outputBytes: bytes });

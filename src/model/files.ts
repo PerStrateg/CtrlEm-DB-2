@@ -6,6 +6,10 @@ export const filesPolicy = {
   qualitySteps: [90, 80, 65], paletteSteps: [256, 128, 64],
   resizeFactor: 0.8, maxResizeSteps: 12,
   galleryReadMs: 15_000, uploadMs: 120_000,
+  /** When false, Local Upload stores GIF originals without ImageMagick reduction. */
+  localUploadGifOptimization: false,
+  /** When false, Local Upload stores oversized originals without resize/re-encode. */
+  localUploadOversizedOptimization: false,
 };
 export const filesAccept = '.jpg,.jpeg,.png,.gif,.webp,.bmp,.avif,.tif,.tiff';
 export type FilePart = 'original' | 'preview' | 'prepared';
