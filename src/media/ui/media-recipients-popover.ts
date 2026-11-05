@@ -1,6 +1,7 @@
 import type { MediaRecipient } from '../domain/media-settings';
 import type { MediaPreferencesStore } from './media-preferences';
 import { createInfoButton } from '../../ui/info-tip';
+import { describeRecipientsError, logRecipients, logRecipientsHint } from '../recipients-debug';
 
 const searchDelayMs = 250;
 
@@ -41,11 +42,13 @@ export class MediaRecipientsPopover {
       void this.search();
     }));
     const search = this.add.querySelector<HTMLInputElement>('[data-search]')!;
-    search.addEventListener('input', () => {
+    const scheduleSearch = () => {
       this.query = search.value.trim();
       this.document.defaultView!.clearTimeout(this.searchTimer);
       this.searchTimer = this.document.defaultView!.setTimeout(() => void this.search(), searchDelayMs);
-    });
+    };
+    search.addEventListener('input', scheduleSearch);
+    search.addEventListener('search', scheduleSearch);
     this.refresh();
   }
 
@@ -70,6 +73,8 @@ export class MediaRecipientsPopover {
 
   private async search(): Promise<void> {
     if (!this.panel.isConnected || this.add.hidden) return;
+    const search = this.add.querySelector<HTMLInputElement>('[data-search]')!;
+    this.query = search.value.trim();
     const list = this.add.querySelector('[data-list]')!;
     const sequence = ++this.sequence;
     this.rows.clear();
@@ -79,8 +84,13 @@ export class MediaRecipientsPopover {
       if (!this.panel.isConnected || sequence !== this.sequence) return;
       list.replaceChildren(...found.map(recipient => this.row(recipient)));
       if (!found.length) list.textContent = 'Nothing found';
-    } catch {
-      if (sequence === this.sequence) list.textContent = 'Couldn’t load recipients.';
+    } catch (error) {
+      if (sequence === this.sequence) {
+        list.textContent = 'Couldn’t load recipients.';
+        logRecipients('popover-ui', { kind: this.kind, queryLength: this.query.length, queryPreview: this.query.slice(0, 40),
+          page: this.document.location.href, ...describeRecipientsError(error) });
+        logRecipientsHint();
+      }
     }
   }
 

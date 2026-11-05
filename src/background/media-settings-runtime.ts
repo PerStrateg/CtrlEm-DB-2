@@ -7,12 +7,14 @@ import { MediaSettingsRepository } from '../storage/media-settings-store';
 import { MediaComposerRepository } from '../storage/media-composer-store';
 import { WriteQueue } from '../storage/library-store';
 import { websiteAccess } from '../shared/website-access';
+import { describeRecipientsError, logRecipients, recipientsDebugTag } from '../media/recipients-debug';
 
 export function registerMediaSettings(): { settings: MediaSettingsRepository; composer: MediaComposerRepository } {
   const repository = new MediaSettingsRepository(chrome.storage.local);
   const composer = new MediaComposerRepository(chrome.storage.local);
   const writes = new WriteQueue();
-  const directory = new CtrlemRecipientDirectoryAdapter(fetch, diagnostic => {
+  const request = fetch.bind(globalThis);
+  const directory = new CtrlemRecipientDirectoryAdapter(request, diagnostic => {
     const method = diagnostic.event === 'failure' ? 'warn' : 'info';
     console[method]('[CtrlEm DB][recipient-api]', diagnostic);
   });
@@ -25,6 +27,16 @@ export function registerMediaSettings(): { settings: MediaSettingsRepository; co
     const extensionPage = sender.id === chrome.runtime.id && (sender.url === popupUrl || sender.url === settingsUrl);
     const webPage = sender.id === chrome.runtime.id && sender.tab?.id !== undefined && isWeb(sender.url);
     if (!parsed.success || (!extensionPage && !webPage)) {
+      if ((input as { type?: string }).type === 'media-settings:recipients') {
+        logRecipients('request-blocked', {
+          parseOk: parsed.success,
+          extensionPage,
+          webPage,
+          senderUrl: sender.url,
+          tabId: sender.tab?.id,
+          parseError: parsed.success ? undefined : parsed.error.flatten(),
+        });
+      }
       respond({ ok: false, error: 'Request not allowed.' }); return false;
     }
     const operation = parsed.data.type === 'media-settings:access-get' ? chrome.permissions.contains(websiteAccess)
@@ -32,11 +44,23 @@ export function registerMediaSettings(): { settings: MediaSettingsRepository; co
       : parsed.data.type === 'media-settings:get' ? repository.read()
       : parsed.data.type === 'media-settings:composer-get' ? composer.read()
       : parsed.data.type === 'media-settings:profile-html'
-        ? fetchProfileHtml(parsed.data.code, fetch).then(html => mediaProfileHtmlSchema.parse(html))
+        ? fetchProfileHtml(parsed.data.code, request).then(html => mediaProfileHtmlSchema.parse(html))
       : parsed.data.type === 'media-settings:recipients' ? directory.search(parsed.data.search.kind, parsed.data.search.query)
       : parsed.data.type === 'media-settings:composer-save' ? saveComposer(parsed.data.preferences)
       : save(parsed.data.settings);
     void operation.then(value => respond({ ok: true, value }), error => {
+      if (parsed.data.type === 'media-settings:recipients') {
+        const search = parsed.data.search;
+        logRecipients('background-api', {
+          kind: search.kind,
+          queryLength: search.query.length,
+          queryPreview: search.query.slice(0, 40),
+          senderUrl: sender.url,
+          ...describeRecipientsError(error),
+        });
+        console.info(recipientsDebugTag, 'background-hint',
+          'This line is from the extension service worker. Copy it together with page-console lines tagged the same way.');
+      }
       const unauthorized = error instanceof Error && /401|403/.test(error.message);
       respond({ ok: false, error: unauthorized ? 'Sign in to CtrlEm.' : 'Couldn’t load CtrlEm. Retry.' });
     });

@@ -4,6 +4,7 @@ import { mediaComposerPreferencesSchema, type MediaComposerPreferences } from '.
 import { controlCodeFromQuery } from '../domain/recipient-profile';
 import { profileDisplayName } from './profile-document';
 import type { MediaSettingsPort } from '../ports/media-settings-port';
+import { describeRecipientsError, logRecipients, logRecipientsHint } from '../recipients-debug';
 
 interface Reply { ok?: boolean; value?: unknown; error?: string }
 
@@ -25,7 +26,8 @@ export class ExtensionMediaSettingsClient implements MediaSettingsPort {
     if (!code) return [];
     const html = await this.profileHtml(code);
     if (!html) return [];
-    const label = profileDisplayName(html);
+    let label: string;
+    try { label = profileDisplayName(html); } catch { return []; }
     return [{ receiver: code.toLowerCase(), kind: 'user', label }];
   }
   async profileHtml(code: string): Promise<string> {
@@ -48,9 +50,16 @@ export class ExtensionMediaSettingsClient implements MediaSettingsPort {
     chrome.runtime.onMessage.addListener(receive);
     return () => chrome.runtime.onMessage.removeListener(receive);
   }
-  private directoryRecipients(kind: MediaRecipient['kind'], query: string): Promise<MediaRecipient[]> {
-    return this.request({ type: 'media-settings:recipients', search: { kind, query } })
-      .then(value => mediaRecipientsSchema.parse(value));
+  private async directoryRecipients(kind: MediaRecipient['kind'], query: string): Promise<MediaRecipient[]> {
+    try {
+      const value = await this.request({ type: 'media-settings:recipients', search: { kind, query } });
+      return mediaRecipientsSchema.parse(value);
+    } catch (error) {
+      logRecipients('content-script', { kind, queryLength: query.length, queryPreview: query.slice(0, 40),
+        ...describeRecipientsError(error) });
+      logRecipientsHint();
+      throw error;
+    }
   }
   private async request(message: unknown): Promise<unknown> {
     const reply = await chrome.runtime.sendMessage(message) as Reply;
