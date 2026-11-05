@@ -6,7 +6,7 @@ Ctrlem discord link: [Ctrlem - Discord](https://discord.gg/ctrlem).
 Project and support: [Ctrlem DB Discussion - Discord](https://discord.com/channels/1465036592262676601/1505167683107160156).
 
 Your links library (**DB**) keeps your media and text links organized in categories. Pick a category and send an item directly to CtrlEm.
-Local Upload (**LU**) accepts images and folders through its buttons or drag and drop. Choose an image to upload it through CtrlEm.
+Local Upload (**LU**) accepts images and folders through its buttons or drag and drop. Choose an image to host it on tmper.app, then send the link through CtrlEm.
 **Redgifs (RG)** lets you send a Redgifs file from the native CtrlEm UI.
 
 Auto-send lets you schedule links and uploads to send automatically at your chosen intervals.

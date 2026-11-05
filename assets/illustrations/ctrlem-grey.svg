@@ -32,7 +32,7 @@
      font-family="Inter, Segoe UI, Arial, sans-serif"
      text-anchor="middle">
     <text x="320" y="188" font-size="48" font-weight="400">CtrlEm</text>
-    <text x="320" y="350" font-size="28" font-weight="400">20 files max</text>
+    <text x="320" y="350" font-size="28" font-weight="400">Temporary host</text>
     <text x="320" y="510" font-size="34" font-weight="400">Send</text>
   </g>
 </svg>
