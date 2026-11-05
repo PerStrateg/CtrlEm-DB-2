@@ -1,6 +1,6 @@
 # Ctrlem DB privacy policy
 
-Version 2.1.0 | Strateg | October 1, 2026
+Version 2.1.1 | Strateg | November 6, 2026
 
 Ctrlem DB contains no analytics or telemetry and does not send user data to its developer. Your library and settings are stored locally in your browser profile. The extension does not use browser sync for this data.
 
@@ -15,10 +15,9 @@ Each CtrlEm tab also keeps a bounded diagnostic log in memory, reset when the pa
 | Feature | Data and destination |
 | --- | --- |
 | CtrlEm Send and automatic sending | Selected text, media URLs, command parameters and recipient information go to CtrlEm through its authenticated command API. |
-| Local Upload (LU) | Images are processed locally using bundled ImageMagick WASM. Selected images are then uploaded to CtrlEm. |
+| Local Upload (LU) | Images are processed locally using bundled ImageMagick WASM. Selected images are then uploaded to tmper.app. |
 | ImgBB image uploads | Selected image files go to ImgBB, with your configured API key or a temporary token obtained from ImgBB for anonymous uploads. |
-| Catbox audio uploads | Selected audio files go to Catbox, with your userhash if configured. |
-| VidHosting video uploads | Selected video files go to VidHosting. |
+| Catbox audio and video uploads | Selected audio and video files go to Catbox, with your userhash if configured. |
 | RedGifs | Embedded pages, searches, API calls and video playback contact RedGifs and its media hosts. The integration uses temporary API tokens and browser cookies, including copying RedGifs cookies into the CtrlEm storage partition for embedded access. |
 | Save website media | A file you choose is downloaded without source cookies, then uploaded through the corresponding image/video provider and added to your local library. |
 | Send website media | On HTTP/HTTPS pages, the extension identifies direct image and video URLs. Selected images outside supported Discord and RedGifs media hosts are downloaded without source cookies, prepared locally and uploaded to CtrlEm before sending. Supported media links and videos are sent directly through its authenticated command API. Only files you choose are uploaded. |
@@ -26,7 +25,7 @@ Each CtrlEm tab also keeps a bounded diagnostic log in memory, reset when the pa
 
 Keys and other authorization data are sent to their corresponding providers. The developer does not receive them. Files, messages and authorization data can contain personal information. Services receiving requests also receive ordinary network metadata, such as your IP address. Their own privacy policies, tracking and retention practices apply. The extension cannot guarantee that third-party pages contain no analytics.
 
-When CtrlEm image storage is full, the extension replaces its oldest uploads that are not needed by queued or active sends. Other uploads are left untouched. Deleting a local library entry or cache does not delete a file already uploaded to a provider. Use the provider's controls for remote deletion where available.
+When CtrlEm image storage is full during website image sending, the extension replaces its oldest CtrlEm uploads that are not needed by queued or active sends. Other uploads are left untouched. Local Upload does not use CtrlEm storage and does not delete hosted files automatically. Deleting a local library entry, Local Upload card or cache does not delete a file already uploaded to a provider. Use the provider's controls for remote deletion where available. Tmper links expire after about one hour.
 
 ## Firefox data consent
 
