@@ -78,6 +78,7 @@
   "src/media/domain/media-command.ts",
   "src/media/domain/media-composer.ts",
   "src/media/domain/media-delivery.ts",
+  "src/media/domain/media-recipient-policy.ts",
   "src/media/domain/media-resource.ts",
   "src/media/domain/media-send-feedback.ts",
   "src/media/domain/media-settings.ts",
