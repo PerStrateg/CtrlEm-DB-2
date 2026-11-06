@@ -10,6 +10,8 @@ import { MediaPreferencesStore } from './media-preferences';
 import { MediaRecipientsPopover } from './media-recipients-popover';
 import { MediaSavePopover } from './media-save-popover';
 import { mediaActions } from '../domain/media-resource';
+import type { MediaRecipient } from '../domain/media-settings';
+import { mediaActionBlockedReason } from '../domain/media-recipient-policy';
 import { mediaSendIdentity, mediaSendFeedbackMs, type MediaSendFeedback } from '../domain/media-send-feedback';
 
 interface MountedMedia {
@@ -17,6 +19,7 @@ interface MountedMedia {
   root: HTMLElement;
   element: HTMLElement;
   bar: MediaActionBar;
+  refresh?: () => void;
 }
 const toastDurationMs = 2200, closeAnimationMs = 140;
 
@@ -63,7 +66,7 @@ export class MediaController {
     if (!target) return this.hideHover();
     if (!this.hover || this.hover.element.dataset.kind !== target.resource.kind) {
       this.hover?.remove();
-      this.hover = this.createBar(target.resource);
+      this.hover = this.createBar(target.resource, target.element, target.element);
       this.hover.element.dataset.kind = target.resource.kind;
       this.hover.element.classList.add('ctrlem-media-actions-floating');
     } else this.hover.set(target.resource);
@@ -103,7 +106,7 @@ export class MediaController {
       found.add(target.key);
       const current = this.mounted.get(target.key);
       if (current?.element !== target.element) this.detach(current);
-      const bar = current?.bar ?? this.createBar(target.resource);
+      const bar = current?.bar ?? this.createBar(target.resource, root, target.element);
       bar.set(target.resource);
       this.reflectBarFeedback(bar, target.resource);
       target.element.classList.add('ctrlem-media-host');
@@ -113,6 +116,7 @@ export class MediaController {
         if (previous && !previous.querySelector('.ctrlem-media-actions')) previous.classList.remove('ctrlem-media-host');
       }
       this.mounted.set(target.key, { key: target.key, root, element: target.element, bar });
+      this.bindLiveRefresh(this.mounted.get(target.key)!);
     }
     for (const entry of this.mounted.values()) {
       if (entry.root !== root || found.has(entry.key)) continue;
@@ -120,13 +124,15 @@ export class MediaController {
     }
   }
 
-  private createBar(resource: MediaResource): MediaActionBar {
+  private createBar(resource: MediaResource, root: HTMLElement, element: HTMLElement): MediaActionBar {
+    const live = () => this.liveResource(root, element, resource);
     const bar = new MediaActionBar(this.document, resource, {
-      send: (action, current) => void this.quickSend(current, action),
+      send: (action, current) => void this.quickSend(live(), action),
       openSettings: anchor => this.openRecipients(anchor),
-      openSave: (anchor, current) => this.openSave(anchor, current),
+      openSave: (anchor, current) => this.openSave(anchor, live()),
     });
-    bar.applyRecipients(this.preferences.recipientNames);
+    bar.applyRecipients(this.preferences.recipientNames,
+      this.recipientBlocks(this.preferences.current?.selectedRecipients ?? [], resource.kind));
     this.reflectBarFeedback(bar, resource);
     return bar;
   }
@@ -147,11 +153,20 @@ export class MediaController {
     panel.querySelector<HTMLButtonElement>('[data-close]')!.focus();
   }
 
-  /** Quick send uses one deterministic snapshot of the resource and the persisted common recipients. */
+  /** Quick send uses the live page URL and the persisted common recipients. */
   private async quickSend(resource: MediaResource, action: MediaAction): Promise<void> {
     const intent = { resource: { ...resource }, action };
     const targets = this.preferences.current?.selectedRecipients.map(recipient => ({ ...recipient }));
-    if (!targets?.length || this.disposed) return;
+    if (this.disposed) return;
+    if (!targets?.length) {
+      this.toast('Choose a CtrlEm recipient.', true);
+      return;
+    }
+    const blocked = mediaActionBlockedReason(action, targets);
+    if (blocked) {
+      this.toast(blocked, true);
+      return;
+    }
     const key = mediaSendIdentity(resource, action, targets);
     if (this.feedback.get(key)?.value.status === 'sending') return;
     this.setFeedback(key, { status: 'sending', message: 'Sending…' });
@@ -193,15 +208,52 @@ export class MediaController {
 
   private reflectRecipients(): void {
     const names = this.preferences.recipientNames;
-    for (const entry of this.mounted.values()) entry.bar.applyRecipients(names);
-    this.hover?.applyRecipients(names);
+    const recipients = this.preferences.current?.selectedRecipients ?? [];
+    for (const entry of this.mounted.values()) {
+      entry.bar.applyRecipients(names, this.recipientBlocks(recipients, entry.bar.currentResource.kind));
+    }
+    this.hover?.applyRecipients(names, this.recipientBlocks(recipients, this.hover.currentResource.kind));
     this.reflectFeedback();
     this.settingsPopover?.refresh();
     this.savePopover?.refresh();
   }
 
+  private recipientBlocks(recipients: MediaRecipient[], kind: MediaResource['kind']): Partial<Record<MediaAction, string>> {
+    const blocked: Partial<Record<MediaAction, string>> = {};
+    for (const action of mediaActions(kind)) {
+      const reason = mediaActionBlockedReason(action, recipients);
+      if (reason) blocked[action] = reason;
+    }
+    return blocked;
+  }
+
+  private liveResource(root: HTMLElement, element: HTMLElement, fallback: MediaResource): MediaResource {
+    for (const target of this.attachments.targetsIn(root)) {
+      if (target.element !== element && !target.element.contains(element) && !element.contains(target.element)) continue;
+      return target.resource;
+    }
+    const generic = this.generic.resolve(element.querySelector('video, img, a[href]') ?? element);
+    return generic?.resource ?? fallback;
+  }
+
+  private bindLiveRefresh(entry: MountedMedia): void {
+    const video = entry.element.matches('video') ? entry.element as HTMLVideoElement
+      : entry.element.querySelector('video');
+    if (!(video instanceof this.document.defaultView!.HTMLVideoElement)) return;
+    const refresh = () => {
+      if (this.disposed || !entry.root.isConnected) return;
+      const resource = this.liveResource(entry.root, entry.element, entry.bar.currentResource);
+      entry.bar.set(resource);
+      this.reflectBarFeedback(entry.bar, resource);
+    };
+    entry.refresh = refresh;
+    video.addEventListener('loadedmetadata', refresh);
+    video.addEventListener('emptied', refresh);
+  }
+
   private detach(entry: MountedMedia | undefined): void {
     if (!entry) return;
+    entry.refresh = undefined;
     entry.element.classList.remove('ctrlem-media-host');
     entry.bar.remove();
   }

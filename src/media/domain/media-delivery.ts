@@ -1,6 +1,7 @@
 import type { MediaKind } from './media-resource';
 
 const discordMediaHosts = new Set(['cdn.discordapp.com', 'media.discordapp.net', 'cdn.discordapp.net']);
+const discordEmbedMediaHost = /^images-ext-\d+\.discordapp\.net$/i;
 const redgifsHostSuffix = '.redgifs.com';
 const redgifsSiteHosts = new Set(['redgifs.com', 'www.redgifs.com']);
 const ctrlemUploadPath = '/api/uploads/';
@@ -14,8 +15,12 @@ export type ImageDelivery = 'direct' | 'upload';
  */
 export function imageDelivery(kind: MediaKind, url: URL): ImageDelivery {
   if (kind === 'video') return 'direct';
-  if (discordMediaHosts.has(url.hostname) || isRedgifsMediaHost(url.hostname) || isCtrlemUpload(url)) return 'direct';
+  if (isDiscordMediaHost(url.hostname) || isRedgifsMediaHost(url.hostname) || isCtrlemUpload(url)) return 'direct';
   return 'upload';
+}
+
+export function isDiscordMediaHost(hostname: string): boolean {
+  return discordMediaHosts.has(hostname) || discordEmbedMediaHost.test(hostname);
 }
 
 function isRedgifsMediaHost(hostname: string): boolean {

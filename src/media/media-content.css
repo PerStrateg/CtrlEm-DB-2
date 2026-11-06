@@ -14,6 +14,7 @@
 .ctrlem-media-actions [aria-busy='true'] svg { animation: ctrlem-send-spinner 1s linear infinite; }
 .ctrlem-media-actions [data-send-state='sent'] { color: #7ee2a8; }
 .ctrlem-media-actions [data-send-state='failed'] { color: #ff8f8f; }
+.ctrlem-media-actions [data-send-state='blocked'] { color: #ff8f8f; cursor: not-allowed; opacity: .92; }
 .ctrlem-media-actions { align-items: flex-end; }
 .ctrlem-media-actions .ctrlem-media-gear { color: var(--accent-primary); }
 .ctrlem-media-gear svg { transition: transform 180ms ease; }

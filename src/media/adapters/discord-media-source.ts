@@ -4,10 +4,31 @@ import type { MediaAttachmentSourcePort, OwnedMediaTarget } from '../ports/media
 const attachmentsSelector = '[id^="message-accessories-"]';
 const attachmentSelector = 'a[data-role="img"][href], video, a[href]';
 
+function videoAttachmentUrl(element: HTMLVideoElement): URL | undefined {
+  const document = element.ownerDocument;
+  const candidates = [element.currentSrc, element.src, ...Array.from(element.querySelectorAll('source'), source => source.src)];
+  return candidates.map(value => directMediaUrl(value, document.baseURI)).find(Boolean);
+}
+
 function attachmentUrl(element: HTMLElement): URL | undefined {
   const document = element.ownerDocument;
-  if (element instanceof document.defaultView!.HTMLVideoElement) return directMediaUrl(element.currentSrc || element.src, document.baseURI);
+  if (element instanceof document.defaultView!.HTMLVideoElement) return videoAttachmentUrl(element);
   return directMediaUrl((element as HTMLAnchorElement).href, document.baseURI);
+}
+
+function isDownloadAnchor(element: HTMLElement): boolean {
+  return element instanceof element.ownerDocument.defaultView!.HTMLAnchorElement &&
+    element.getAttribute('aria-label') === 'Download';
+}
+
+function preferMediaUrl(video: URL | undefined, download: URL | undefined): URL | undefined {
+  if (!video) return download;
+  if (!download) return video;
+  if (mediaKindFromUrl(download) !== 'video') return video;
+  const videoPath = video.pathname;
+  const lacksExtension = !/\.(?:mov|mp4|webm)$/i.test(videoPath);
+  const proxied = /images-ext-\d+\.discordapp\.net$/i.test(video.hostname);
+  return lacksExtension || proxied ? download : video;
 }
 
 function attachmentKind(element: HTMLElement, url: URL): 'image' | 'video' | undefined {
@@ -45,7 +66,12 @@ export class DiscordMediaSource implements MediaAttachmentSourcePort {
 
   targetsIn(root: Element): OwnedMediaTarget[] {
     const targets = new Map<string, OwnedMediaTarget>();
+    let downloadUrl: URL | undefined;
     for (const element of root.querySelectorAll<HTMLElement>(attachmentSelector)) {
+      if (isDownloadAnchor(element)) {
+        const url = attachmentUrl(element);
+        if (url && mediaKindFromUrl(url) === 'video') downloadUrl = url;
+      }
       const url = attachmentUrl(element);
       if (!url) continue;
       const kind = attachmentKind(element, url);
@@ -53,6 +79,16 @@ export class DiscordMediaSource implements MediaAttachmentSourcePort {
       const resource = mediaResource(kind, url);
       if (targets.has(resource.id) && !element.matches('a[data-role="img"], video')) continue;
       targets.set(resource.id, { key: `${root.id}\u0000${resource.id}`, resource, element: attachmentFrame(element, root) });
+    }
+    if (downloadUrl) {
+      for (const target of [...targets.values()]) {
+        if (target.resource.kind !== 'video') continue;
+        const chosen = preferMediaUrl(new URL(target.resource.url), downloadUrl);
+        if (!chosen || chosen.href === target.resource.url) continue;
+        targets.delete(target.resource.id);
+        const resource = mediaResource('video', chosen);
+        targets.set(resource.id, { ...target, key: `${root.id}\u0000${resource.id}`, resource });
+      }
     }
     return [...targets.values()];
   }

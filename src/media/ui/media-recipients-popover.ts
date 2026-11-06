@@ -33,7 +33,7 @@ export class MediaRecipientsPopover {
     this.disclosure = panel.querySelector('[data-disclosure]')!;
     this.status = panel.querySelector('[data-status]')!;
     panel.querySelector('header')!.append(createInfoButton(document, 'About recipients',
-      'Quick sends on all sites use these recipients.'));
+      'Quick sends on all sites use these recipients. Video overlay sends to people only, not groups.'));
     this.disclosure.addEventListener('click', () => this.toggleDirectory());
     this.add.querySelectorAll<HTMLButtonElement>('[data-kind]').forEach(button => button.addEventListener('click', () => {
       this.kind = button.dataset.kind as MediaRecipient['kind'];

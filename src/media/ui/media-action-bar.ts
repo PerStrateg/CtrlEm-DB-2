@@ -37,6 +37,7 @@ export class MediaActionBar {
   private readonly save: HTMLButtonElement;
   private readonly settings: HTMLButtonElement;
   private names = '';
+  private readonly blocked = new Map<MediaAction, string>();
   private readonly feedback = new Map<MediaAction, MediaSendFeedback>();
 
   get currentResource(): MediaResource { return this.resource; }
@@ -53,6 +54,7 @@ export class MediaActionBar {
       const button = this.icon(`ctrlem-media-send ctrlem-media-send-${send.action}`, send.label, send.icon);
       button.addEventListener('click', event => {
         stop(event);
+        if (this.blocked.get(send.action)) return;
         if (button.getAttribute('aria-disabled') !== 'true') this.handlers.send(send.action, this.resource);
       });
       this.sendButtons.set(send.action, button);
@@ -71,12 +73,17 @@ export class MediaActionBar {
     if (!sameChildren(this.stack, stack)) this.stack.replaceChildren(...stack);
     const children = [...quickSends[resource.kind].map(send => this.sendButtons.get(send.action)!), this.stack];
     if (!sameChildren(this.element, children)) this.element.replaceChildren(...children);
-    this.applyRecipients(this.names);
+    this.applyRecipients(this.names, Object.fromEntries(this.blocked));
   }
 
-  /** Quick send stays hidden until common recipients exist; the hint then names them, nothing else. */
-  applyRecipients(names: string): void {
+  /** Quick send stays hidden until common recipients exist; blocked actions show in red. */
+  applyRecipients(names: string, blocked: Readonly<Partial<Record<MediaAction, string>>> = {}): void {
     this.names = names;
+    this.blocked.clear();
+    for (const send of quickSends[this.resource.kind]) {
+      const reason = blocked[send.action];
+      if (reason) this.blocked.set(send.action, reason);
+    }
     for (const send of quickSends[this.resource.kind]) {
       const button = this.sendButtons.get(send.action)!;
       button.hidden = !names;
@@ -95,6 +102,17 @@ export class MediaActionBar {
   private renderFeedback(send: QuickSend, button: HTMLButtonElement): void {
     const value = this.feedback.get(send.action);
     const status = value?.status ?? 'idle';
+    const blocked = this.blocked.get(send.action);
+    if (blocked && status === 'idle') {
+      button.dataset.sendState = 'blocked';
+      button.setAttribute('aria-busy', 'false');
+      button.setAttribute('aria-disabled', 'true');
+      button.setAttribute('aria-label', blocked);
+      button.dataset.info = `${blocked}\n${this.names}`;
+      const path = button.querySelector('path')!;
+      if (path.getAttribute('d') !== iconPaths[send.icon]) path.setAttribute('d', iconPaths[send.icon]);
+      return;
+    }
     button.dataset.sendState = status;
     button.setAttribute('aria-busy', String(status === 'sending'));
     button.setAttribute('aria-disabled', String(status === 'sending'));
